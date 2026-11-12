@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
   const data = await getSession(req);
   if (!data.lastState || params.get("state") !== data.lastState) {
-    clearSession(res);
+    await clearSession(req, res);
     return res.redirect(302, "/?mcp_error=invalid_oauth_state");
   }
 
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     return res.redirect(302, "/");
   } catch (error) {
     console.error("MCP OAuth callback failed:", error);
-    clearSession(res);
+    await clearSession(req, res);
     return res.redirect(302, "/?mcp_error=oauth_callback_failed");
   } finally {
     try { await client?.close(); } catch {}
