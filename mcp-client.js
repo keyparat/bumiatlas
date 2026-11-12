@@ -58,9 +58,10 @@ function makeClient() {
   return new Client({ name: "bumiatlas-gis-editor", version: "0.3.0" });
 }
 function makeTransport(provider) {
+  // Keep the browser's default redirect handling. Forcing redirect:"error"
+  // turns ordinary HTTP redirects into an opaque "Failed to fetch" error.
   return new StreamableHTTPClientTransport(new URL(MCP_URL), {
-    authProvider: provider,
-    fetch: (input, init = {}) => fetch(input, { ...init, redirect: "error" })
+    authProvider: provider
   });
 }
 async function connectExistingSession(provider) {
