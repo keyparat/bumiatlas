@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
     const name = String(body.name || "");
     const args = body.args && typeof body.args === "object" ? body.args : {};
-    if (!["Parcel_search", "Parcel_get"].includes(name)) {
+    if (!["Parcel_search", "Parcel_get", "Parcel_image"].includes(name)) {
       return sendJson(res, 400, { error: "Tool MCP tidak diizinkan." });
     }
 
