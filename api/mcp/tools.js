@@ -8,7 +8,7 @@ import {
 export default async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed" });
   if (!isSameOriginRequest(req)) return sendJson(res, 403, { error: "Permintaan lintas origin ditolak." });
-  const data = getSession(req);
+  const data = await getSession(req);
   if (!data.tokens?.access_token) return sendJson(res, 401, { error: "Hubungkan akun BumiAtlas terlebih dahulu." });
 
   const chunks = [];
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
       ({ client, transport } = await createMcpClient(provider));
       await client.connect(transport);
       const result = await client.callTool({ name, arguments: args });
-      setSession(res, provider.data, req);
+      await setSession(res, provider.data, req);
       if (result?.isError) {
         const detail = (result.content || []).map(item => item.text || "").join("\n");
         return sendJson(res, 502, { error: detail || "Tool MCP mengembalikan kesalahan." });
