@@ -1,3 +1,5 @@
+export const config = { api: { bodyParser: false } };
+
 import {
   BumiAtlasOAuthProvider, createMcpClient, getRedirectUri,
   getSession, sendJson, setSession
