@@ -57,11 +57,29 @@ let activeProvider = null;
 function makeClient() {
   return new Client({ name: "bumiatlas-gis-editor", version: "0.3.0" });
 }
+function makeSameOriginFetch(input, init) {
+  const rawUrl = input instanceof Request ? input.url : String(input);
+  const target = new URL(rawUrl, window.location.href);
+
+  // Route all BumiAtlas HTTP fetches (MCP, protected-resource metadata,
+  // authorization-server metadata, registration and token exchange) through
+  // our Vercel function. Browser navigation to the authorization page remains
+  // direct because redirectToAuthorization() still uses location.assign().
+  if (target.origin === new URL(MCP_URL).origin) {
+    const proxyUrl = new URL(
+      `/api/mcp-proxy${target.pathname}${target.search}`,
+      window.location.origin
+    );
+    return fetch(proxyUrl, init ?? (input instanceof Request ? input : undefined));
+  }
+
+  return fetch(input, init);
+}
+
 function makeTransport(provider) {
-  // Keep the browser's default redirect handling. Forcing redirect:"error"
-  // turns ordinary HTTP redirects into an opaque "Failed to fetch" error.
   return new StreamableHTTPClientTransport(new URL(MCP_URL), {
-    authProvider: provider
+    authProvider: provider,
+    fetch: makeSameOriginFetch
   });
 }
 async function connectExistingSession(provider) {
