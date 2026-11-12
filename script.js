@@ -116,13 +116,18 @@ document.querySelectorAll(".layer-row").forEach(button => {
   button.addEventListener("click", () => {
     const layerName = button.dataset.layer;
     if (layerName === "parcels") {
-      // Parcel overlays are loaded from a specific MCP search result, not as a global tile layer.
-      document.getElementById("searchInput").focus();
-      document.getElementById("parcelResults").scrollIntoView({ behavior: "smooth", block: "nearest" });
-      const connected = document.getElementById("mcpStatus").textContent === "Terhubung";
-      toast(connected
-        ? "Masukkan NIB atau nomor sertifikat pada kolom pencarian untuk memuat batas persil."
-        : "Hubungkan akun BumiAtlas, lalu cari NIB atau nomor sertifikat untuk memuat batas persil.");
+      document.querySelectorAll(".layer-row").forEach(row => {
+        const active = row === button;
+        row.classList.toggle("active", active);
+        row.setAttribute("aria-pressed", String(active));
+      });
+      if (document.getElementById("mcpStatus").textContent !== "Terhubung") {
+        toast("Hubungkan akun BumiAtlas terlebih dahulu untuk memuat bidang.");
+        return;
+      }
+      if (map.getZoom() < PARCEL_MIN_ZOOM) map.setZoom(PARCEL_MIN_ZOOM);
+      else loadParcelsInView();
+      toast("Memuat bidang tanah pada area peta yang terlihat…");
       return;
     }
     if (layerName !== "streets") {
@@ -352,6 +357,203 @@ function extractGeometry(value) {
   if (value.result) return extractGeometry(value.result);
   return null;
 }
+
+const PARCEL_MIN_ZOOM = 15;
+const PARCEL_MAX_PER_VIEW = 35;
+let parcelViewTimer = null;
+let parcelViewRequest = 0;
+const parcelGeometryCache = new Map();
+const parcelImageCache = new Map();
+
+function parseParcelImageResult(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const parsed = parseParcelImageResult(item);
+      if (parsed.length) return parsed;
+    }
+    return [];
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string") {
+      try { return parseParcelImageResult(JSON.parse(value)); } catch { return []; }
+    }
+    return [];
+  }
+  const direct = normalizeParcelList(value);
+  if (direct.length) return direct;
+  for (const key of ["structuredContent", "result", "data", "content", "parcels", "features"]) {
+    if (value[key] !== undefined) {
+      const parsed = parseParcelImageResult(value[key]);
+      if (parsed.length) return parsed;
+    }
+  }
+  if (typeof value.text === "string") {
+    try { return parseParcelImageResult(JSON.parse(value.text)); } catch {}
+  }
+  return [];
+}
+
+function parcelViewRadius() {
+  const bounds = map.getBounds();
+  const center = bounds.getCenter();
+  const corners = [bounds.getNorthWest(), bounds.getNorthEast(), bounds.getSouthWest(), bounds.getSouthEast()];
+  const radius = Math.max(...corners.map(point => map.distance(center, point)));
+  return Math.max(80, Math.min(5000, Math.ceil(radius)));
+}
+
+function scheduleParcelViewLoad() {
+  if (!document.querySelector('.layer-row[data-layer="parcels"]').classList.contains("active")) return;
+  clearTimeout(parcelViewTimer);
+  parcelViewTimer = setTimeout(loadParcelsInView, 650);
+}
+
+async function loadParcelsInView() {
+  if (document.getElementById("mcpStatus").textContent !== "Terhubung") return;
+  if (map.getZoom() < PARCEL_MIN_ZOOM) {
+    remoteParcelLayers.clearLayers();
+    parcelResultsEl.replaceChildren();
+    toast("Perbesar peta untuk melihat batas bidang tanah.");
+    return;
+  }
+  const requestId = ++parcelViewRequest;
+  const center = map.getCenter();
+  const query = center.lat.toFixed(6) + ", " + center.lng.toFixed(6);
+  const radius = parcelViewRadius();
+  const cacheKey = [map.getZoom(), query, radius].join(":");
+  parcelResultsEl.replaceChildren();
+  const loading = document.createElement("p");
+  loading.className = "editor-hint";
+  loading.textContent = "Memuat daftar bidang pada area peta…";
+  parcelResultsEl.append(loading);
+  try {
+    let parcels = parcelImageCache.get(cacheKey);
+    if (!parcels) {
+      const response = await callBumiAtlasTool("Parcel_image", {
+        query, radius, basemaps: ["streets"], size: 512
+      });
+      parcels = parseParcelImageResult(response);
+      parcelImageCache.set(cacheKey, parcels);
+      if (parcelImageCache.size > 30) parcelImageCache.delete(parcelImageCache.keys().next().value);
+    }
+    if (requestId !== parcelViewRequest) return;
+    if (!parcels.length) {
+      parcelResultsEl.replaceChildren();
+      const empty = document.createElement("p");
+      empty.className = "editor-hint";
+      empty.textContent = "Tidak ada bidang yang dikembalikan pada area ini. Coba geser atau perbesar peta.";
+      parcelResultsEl.append(empty);
+      remoteParcelLayers.clearLayers();
+      toast("Tidak ada data persil pada area peta ini.");
+      return;
+    }
+    const limited = parcels.slice(0, PARCEL_MAX_PER_VIEW);
+    parcelResultsEl.replaceChildren();
+    const summary = document.createElement("p");
+    summary.className = "editor-hint";
+    summary.textContent = limited.length + " bidang ditemukan pada area tampilan. Ketuk polygon untuk melihat detail.";
+    parcelResultsEl.append(summary);
+    remoteParcelLayers.clearLayers();
+    let cursor = 0;
+    const workers = Array.from({ length: 4 }, async () => {
+      while (cursor < limited.length) {
+        const parcel = limited[cursor++];
+        if (requestId !== parcelViewRequest) return;
+        try {
+          const full = parcelGeometryCache.get(String(parcel.id)) ||
+            await callBumiAtlasTool("Parcel_get", { id: String(parcel.id), include_geometry: true });
+          parcelGeometryCache.set(String(parcel.id), full);
+          if (requestId !== parcelViewRequest) return;
+          const geometry = extractGeometry(full);
+          if (!geometry) continue;
+          const feature = { type: "Feature", geometry, properties: { ...parcel, ...full } };
+          const layer = L.geoJSON(feature, {
+            style: { color: "#c99b27", weight: 1.5, fillColor: "#f1d46d", fillOpacity: 0.13 }
+          });
+          layer.eachLayer(shape => shape.on("click", event => {
+            L.DomEvent.stopPropagation(event);
+            showParcelDetail(feature, shape);
+          }));
+          layer.addTo(remoteParcelLayers);
+        } catch (error) {
+          console.warn("Parcel geometry could not be loaded:", parcel.id, error);
+        }
+      }
+    });
+    await Promise.all(workers);
+    if (requestId !== parcelViewRequest) return;
+    const rendered = remoteParcelLayers.getLayers().length;
+    toast(rendered + " bidang ditampilkan pada peta.");
+    const list = document.createElement("div");
+    list.className = "parcel-view-list";
+    limited.forEach(parcel => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "parcel-view-item";
+      item.textContent = (parcel.nib || parcel.label || parcel.nomor || "Persil") +
+        (parcel.tipehak ? " · " + parcel.tipehak : "");
+      item.addEventListener("click", async () => {
+        try {
+          const full = parcelGeometryCache.get(String(parcel.id)) ||
+            await callBumiAtlasTool("Parcel_get", { id: String(parcel.id), include_geometry: true });
+          parcelGeometryCache.set(String(parcel.id), full);
+          const geometry = extractGeometry(full);
+          if (!geometry) return toast("Geometri bidang tidak tersedia.");
+          const feature = { type: "Feature", geometry, properties: { ...parcel, ...full } };
+          const temp = L.geoJSON(feature);
+          if (temp.getBounds().isValid()) map.fitBounds(temp.getBounds(), { maxZoom: 19 });
+          showParcelDetail(feature, null);
+        } catch (error) { toast(error.message || "Detail persil gagal dimuat."); }
+      });
+      list.append(item);
+    });
+    parcelResultsEl.append(list);
+  } catch (error) {
+    if (requestId !== parcelViewRequest) return;
+    parcelResultsEl.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "editor-hint mcp-error";
+    message.textContent = error.message || "Gagal memuat bidang pada area peta.";
+    parcelResultsEl.append(message);
+    toast("Gagal memuat bidang. Periksa koneksi MCP.");
+  }
+}
+
+function showParcelDetail(feature, layer) {
+  const props = feature.properties || {};
+  const fields = [
+    ["NIB", props.nib || props.label], ["Nomor sertifikat", props.nomor],
+    ["Jenis hak", props.tipehak],
+    ["Luas tertulis", props.luas != null ? Number(props.luas).toLocaleString("id-ID") + " m²" : ""],
+    ["Luas peta", props.luasHitung != null ? Number(props.luasHitung).toLocaleString("id-ID") + " m²" : ""],
+    ["Tahun", props.tahun], ["Desa", props.desa || props.wilayah?.lokasi]
+  ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+  const popup = document.createElement("div");
+  popup.className = "parcel-detail-popup";
+  const heading = document.createElement("strong");
+  heading.textContent = props.nib || props.label || props.nomor || "Detail bidang tanah";
+  popup.append(heading);
+  fields.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "parcel-detail-row";
+    const key = document.createElement("span"); key.textContent = label;
+    const val = document.createElement("b"); val.textContent = String(value);
+    row.append(key, val); popup.append(row);
+  });
+  const download = document.createElement("button");
+  download.type = "button"; download.className = "parcel-download-button";
+  download.textContent = "↓ Unduh GeoJSON";
+  download.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(feature, null, 2)], { type: "application/geo+json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = "persil-" + String(props.nib || props.id || "bumiatlas") + ".geojson";
+    link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  popup.append(download);
+  if (layer) layer.bindPopup(popup, { maxWidth: 280 }).openPopup();
+  else L.popup({ maxWidth: 280 }).setLatLng(map.getCenter()).setContent(popup).openOn(map);
+}
+
 async function loadParcelGeometry(parcel, button) {
   if (!parcel.id) {
     toast("Hasil ini tidak memiliki ID persil untuk meminta geometri.");
@@ -411,7 +613,10 @@ disconnectMcpButton.addEventListener("click", async () => {
   try {
     const result = await initializeBumiAtlas();
     setMcpUi(!!result.connected, result.tools || []);
-    if (result.connected) toast("Sesi BumiAtlas MCP dipulihkan.");
+    if (result.connected) {
+      toast("Sesi BumiAtlas MCP dipulihkan.");
+      if (document.querySelector('.layer-row[data-layer="parcels"]').classList.contains("active")) scheduleParcelViewLoad();
+    }
   } catch (error) {
     setMcpUi(false);
     const message = document.createElement("p");
