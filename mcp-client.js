@@ -1,166 +1,62 @@
-import { Client } from "@modelcontextprotocol/client";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-
 export const MCP_URL = "https://bumiatlas.com/mcp";
-const STORAGE_KEY = "bumiatlas.mcp.oauth.session.v1";
 
-function readState() {
-  try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}"); }
-  catch { return {}; }
-}
-function writeState(state) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-class BrowserOAuthProvider {
-  constructor() { this.data = readState(); this.lastState = this.data.lastState; }
-  get redirectUrl() { return `${window.location.origin}/mcp/callback`; }
-  get clientMetadata() {
-    return {
-      client_name: "BumiAtlas GIS Editor",
-      redirect_uris: [this.redirectUrl],
-      application_type: "web"
-    };
-  }
-  clientInformation(ctx) {
-    return ctx?.issuer ? this.data.clients?.[ctx.issuer] : undefined;
-  }
-  saveClientInformation(info, ctx) {
-    if (!ctx?.issuer) throw new Error("OAuth issuer context is missing.");
-    this.data.clients ||= {};
-    this.data.clients[ctx.issuer] = info;
-    writeState(this.data);
-  }
-  tokens() { return this.data.tokens; }
-  saveTokens(tokens) { this.data.tokens = tokens; writeState(this.data); }
-  state() {
-    this.lastState = crypto.randomUUID();
-    this.data.lastState = this.lastState;
-    writeState(this.data);
-    return this.lastState;
-  }
-  saveDiscoveryState(discovery) { this.data.discovery = discovery; writeState(this.data); }
-  discoveryState() { return this.data.discovery; }
-  saveCodeVerifier(verifier) { this.data.verifier = verifier; writeState(this.data); }
-  codeVerifier() {
-    if (!this.data.verifier) throw new Error("OAuth PKCE verifier is missing.");
-    return this.data.verifier;
-  }
-  redirectToAuthorization(url) { window.location.assign(url.href); }
-  clear() { sessionStorage.removeItem(STORAGE_KEY); }
-}
-
-let activeClient = null;
-let activeTransport = null;
-let activeProvider = null;
-
-function makeClient() {
-  return new Client({ name: "bumiatlas-gis-editor", version: "0.3.0" });
-}
-function makeSameOriginFetch(input, init) {
-  const rawUrl = input instanceof Request ? input.url : String(input);
-  const target = new URL(rawUrl, window.location.href);
-
-  // Route all BumiAtlas HTTP fetches (MCP, protected-resource metadata,
-  // authorization-server metadata, registration and token exchange) through
-  // our Vercel function. Browser navigation to the authorization page remains
-  // direct because redirectToAuthorization() still uses location.assign().
-  if (target.origin === new URL(MCP_URL).origin) {
-    const proxyUrl = new URL(
-      `/api/mcp-proxy${target.pathname}${target.search}`,
-      window.location.origin
-    );
-    return fetch(proxyUrl, init ?? (input instanceof Request ? input : undefined));
-  }
-
-  return fetch(input, init);
-}
-
-function makeTransport(provider) {
-  return new StreamableHTTPClientTransport(new URL(MCP_URL), {
-    authProvider: provider,
-    fetch: makeSameOriginFetch
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    cache: "no-store",
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {})
+    }
   });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || `Permintaan backend gagal (HTTP ${response.status}).`);
+  }
+  return data;
 }
-async function connectExistingSession(provider) {
-  const client = makeClient();
-  const transport = makeTransport(provider);
-  await client.connect(transport);
-  activeClient = client;
-  activeTransport = transport;
-  activeProvider = provider;
-  return client;
-}
+
 export async function connectBumiAtlas() {
-  const provider = new BrowserOAuthProvider();
-  try {
-    const client = await connectExistingSession(provider);
-    const tools = await client.listTools();
-    return { connected: true, tools: tools.tools || [] };
-  } catch (error) {
-    if (error?.name === "UnauthorizedError") return { redirecting: true };
-    throw error;
-  }
+  // OAuth authorization and callback are handled by Vercel, not the browser.
+  window.location.assign("/api/mcp/connect");
+  return { redirecting: true };
 }
+
 export async function initializeBumiAtlas() {
-  const provider = new BrowserOAuthProvider();
-  const callback = window.location.pathname === "/mcp/callback";
-  if (callback) {
-    const params = new URLSearchParams(window.location.search);
-    if (params.has("error")) {
-      provider.clear();
-      window.history.replaceState({}, "", "/");
-      throw new Error("Otorisasi BumiAtlas ditolak atau dibatalkan.");
-    }
-    if (!params.has("code")) {
-      window.history.replaceState({}, "", "/");
-      return { connected: false };
-    }
-    if (!provider.lastState || params.get("state") !== provider.lastState) {
-      provider.clear();
-      window.history.replaceState({}, "", "/");
-      throw new Error("Validasi state OAuth gagal. Silakan hubungkan ulang.");
-    }
-    const authTransport = makeTransport(provider);
-    await authTransport.finishAuth(params);
+  const params = new URLSearchParams(window.location.search);
+  const callbackError = params.get("mcp_error");
+  if (callbackError) {
     window.history.replaceState({}, "", "/");
-    const client = await connectExistingSession(provider);
-    const tools = await client.listTools();
-    return { connected: true, tools: tools.tools || [] };
+    return { connected: false, error: callbackError };
   }
-  if (provider.tokens()) {
-    try {
-      const client = await connectExistingSession(provider);
-      const tools = await client.listTools();
-      return { connected: true, tools: tools.tools || [] };
-    } catch (error) {
-      if (error?.name === "UnauthorizedError") {
-        provider.clear();
-        return { connected: false, expired: true };
-      }
-      throw error;
-    }
-  }
-  return { connected: false };
+  return api("/api/mcp/status");
 }
+
 export async function callBumiAtlasTool(name, args) {
-  if (!activeClient) throw new Error("Hubungkan akun BumiAtlas terlebih dahulu.");
-  const result = await activeClient.callTool({ name, arguments: args });
+  const data = await api("/api/mcp/tools", {
+    method: "POST",
+    body: JSON.stringify({ name, args })
+  });
+  const result = data.result;
   if (result?.isError) {
     const message = (result.content || []).map(item => item.text || "").join("\n");
     throw new Error(message || "Tool MCP mengembalikan kesalahan.");
   }
   if (result?.structuredContent !== undefined) return result.structuredContent;
-  const textContent = (result.content || []).filter(item => item.type === "text").map(item => item.text).join("\n");
+  const textContent = (result?.content || [])
+    .filter(item => item.type === "text")
+    .map(item => item.text)
+    .join("\n");
   if (!textContent) return result;
   try { return JSON.parse(textContent); } catch { return { text: textContent }; }
 }
+
 export async function disconnectBumiAtlas() {
-  try { await activeClient?.close(); } catch {}
-  try { await activeTransport?.close(); } catch {}
-  activeClient = null;
-  activeTransport = null;
-  activeProvider?.clear();
-  activeProvider = null;
+  await api("/api/mcp/disconnect", { method: "POST" });
 }
-export function getBumiAtlasStatus() { return { connected: !!activeClient }; }
+
+export function getBumiAtlasStatus() {
+  return { connected: false };
+}
