@@ -82,8 +82,14 @@
 
         <section class="section-block mcp-block">
           <div class="section-title"><span class="section-label">SUMBER DATA BUMIATLAS</span><span class="mcp-status" id="mcpStatus">Belum terhubung</span></div>
-          <p>Data persil resmi yang tersedia pada layanan BumiAtlas MCP akan diambil melalui koneksi terotorisasi.</p>
-          <a class="editor-button" href="https://bumiatlas.com/mcp" target="_blank" rel="noreferrer">Buka BumiAtlas MCP ↗</a>
+          <p>Hubungkan akun BumiAtlas melalui OAuth untuk mencari persil ATR/BPN langsung dari peta.</p>
+          <div class="mcp-connect-actions">
+            <button class="editor-button primary" id="connectMcp" type="button">Hubungkan akun BumiAtlas</button>
+            <button class="editor-button" id="disconnectMcp" type="button" hidden>Putuskan koneksi</button>
+          </div>
+          <div id="mcpTools" class="mcp-tools" hidden></div>
+          <div id="parcelResults" class="parcel-results" aria-live="polite"></div>
+          <a class="mcp-docs" href="https://bumiatlas.com/mcp-docs/parcels" target="_blank" rel="noreferrer">Dokumentasi data persil MCP ↗</a>
           <a class="mcp-docs" href="https://bumiatlas.com/mcp-docs" target="_blank" rel="noreferrer">Dokumentasi koneksi dan tool MCP</a>
         </section>
 
@@ -115,6 +121,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <script src="./script.js"></script>
+    <script type="module" src="./script.js"></script>
   </body>
 </html>
