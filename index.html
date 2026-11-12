@@ -1,152 +1,92 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="BumiAtlas parcel intelligence portal powered by the BumiAtlas MCP for Indonesian land and spatial data." />
-    <meta name="theme-color" content="#0c221b" />
-    <title>BumiAtlas — Land Intelligence</title>
+    <meta name="theme-color" content="#f6f7f4" />
+    <meta name="description" content="Explore Indonesian places on a map and connect to BumiAtlas MCP parcel research tools." />
+    <title>BumiAtlas | Indonesia map &amp; parcel research</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-frame">
-      <aside class="sidebar">
-        <div class="brand-row">
-          <div class="brand-mark">B</div>
-          <div class="brand-copy">
-            <div class="brand-name">BumiAtlas</div>
-            <div class="brand-subtitle">Parcel intelligence for Indonesia</div>
-          </div>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="BumiAtlas home"><span class="brand-mark">B</span><span class="brand-name">Bumi<span>Atlas</span></span></a>
+      <form class="search" id="searchForm" role="search">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="searchInput" autocomplete="off" placeholder="Search a place or paste latitude, longitude" aria-label="Search a place or coordinates" />
+        <kbd>Enter</kbd>
+        <button type="submit" aria-label="Search">Search</button>
+      </form>
+      <div class="top-actions">
+        <a class="docs-link" href="https://bumiatlas.com/mcp-docs/parcels" target="_blank" rel="noreferrer">Docs <span>↗</span></a>
+        <a class="connect-link" href="https://bumiatlas.com/mcp/" target="_blank" rel="noreferrer">Connect MCP <span>↗</span></a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar" id="sidebar">
+        <div class="side-heading">
+          <div><p class="eyebrow">INDONESIA · MAP EXPLORER</p><h1>Explore the map</h1></div>
+          <button class="icon-button collapse-button" id="collapseSidebar" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
         </div>
+        <p class="intro-copy">Explore places on the map, then use BumiAtlas MCP for parcel and land-data research.</p>
 
-        <section class="panel search-panel">
-          <div class="panel-header">
-            <span>Search</span>
-            <span class="badge success">MCP live</span>
-          </div>
+        <section class="section-block search-help">
+          <label class="section-label" for="searchInput">FIND A LOCATION</label>
+          <p>Search a place name or enter coordinates. Parcel searches are available through MCP.</p>
+          <button class="location-button" id="locateButton" type="button"><span aria-hidden="true">◎</span> Use my location</button>
+        </section>
 
-          <label class="field-label" for="searchInput">Parcel, certificate or coordinates</label>
-          <div class="search-box">
-            <input id="searchInput" type="text" value="-6.2000, 106.8167" />
-            <button id="searchButton" type="button">Search</button>
-          </div>
+        <section class="section-block layers-block">
+          <div class="section-title"><span class="section-label">MAP LAYERS</span><button class="text-action" id="resetLayers" type="button">Reset</button></div>
+          <button class="layer-row active" type="button" data-layer="streets" aria-pressed="true">
+            <span class="layer-icon streets-icon">▧</span><span class="layer-info"><strong>Street map</strong><small>OpenStreetMap</small></span><span class="layer-check">✓</span>
+          </button>
+          <button class="layer-row unavailable" type="button" data-layer="parcels" aria-pressed="false">
+            <span class="layer-icon parcel-icon">⌗</span><span class="layer-info"><strong>Land parcels</strong><small>ATR/BPN · MCP data</small></span><span class="layer-lock">↗</span>
+          </button>
+          <button class="layer-row unavailable" type="button" data-layer="hgu" aria-pressed="false">
+            <span class="layer-icon hgu-icon">◇</span><span class="layer-info"><strong>HGU &amp; concessions</strong><small>Connect a data source</small></span><span class="layer-lock">↗</span>
+          </button>
+          <button class="layer-row unavailable" type="button" data-layer="zoning" aria-pressed="false">
+            <span class="layer-icon zoning-icon">▦</span><span class="layer-info"><strong>Zoning</strong><small>Connect a data source</small></span><span class="layer-lock">↗</span>
+          </button>
+          <button class="layer-row unavailable" type="button" data-layer="flood" aria-pressed="false">
+            <span class="layer-icon flood-icon">≈</span><span class="layer-info"><strong>Flood hazard</strong><small>InaRISK · MCP tool</small></span><span class="layer-lock">↗</span>
+          </button>
+          <div class="data-note"><span class="note-icon">i</span><span>Only the basemap is shown here. Parcel and thematic overlays are not included in this preview.</span></div>
+        </section>
 
-          <div class="input-row">
-            <div class="field-group">
-              <label for="radiusInput">Radius</label>
-              <input id="radiusInput" type="number" value="500" min="50" max="5000" />
-            </div>
-            <div class="field-group">
-              <label for="bufferInput">Buffer</label>
-              <input id="bufferInput" type="number" value="0" min="0" max="1000" />
-            </div>
-          </div>
-
-          <div class="button-row">
-            <button id="locateButton" class="button secondary" type="button">Use my location</button>
-            <button id="centerIndonesia" class="button secondary" type="button">Indonesia</button>
+        <section class="section-block results-block">
+          <div class="section-title"><span class="section-label">MAP SELECTION</span><span class="result-count" id="resultCount">No selection</span></div>
+          <div class="empty-state" id="emptyState"><span class="empty-icon">⌖</span><strong>Nothing selected</strong><p>Click the map or search coordinates to inspect a point.</p></div>
+          <div class="selection-card" id="selectionCard" hidden>
+            <div class="selection-pin">⌖</div><div class="selection-copy"><strong>Selected location</strong><span id="selectedCoordinates">—</span></div><button id="copyCoordinates" class="copy-button" type="button" aria-label="Copy coordinates" title="Copy coordinates">▢</button>
           </div>
         </section>
 
-        <section class="stats-grid">
-          <div class="panel stat-card">
-            <span class="stat-label">Parcels</span>
-            <strong>2.4K</strong>
-            <small>visible</small>
-          </div>
-          <div class="panel stat-card">
-            <span class="stat-label">HGU</span>
-            <strong>53</strong>
-            <small>claims</small>
-          </div>
-          <div class="panel stat-card">
-            <span class="stat-label">Flood</span>
-            <strong>14%</strong>
-            <small>hazard</small>
-          </div>
-          <div class="panel stat-card">
-            <span class="stat-label">Zoning</span>
-            <strong>9</strong>
-            <small>matches</small>
-          </div>
-        </section>
-
-        <section class="panel list-panel">
-          <div class="panel-header">
-            <span>Results</span>
-            <span class="badge neutral">8 matches</span>
-          </div>
-
-          <ul id="resultList" class="result-list"></ul>
-        </section>
+        <div class="sidebar-bottom"><span class="status-dot"></span><span>Map preview</span><span class="bottom-divider">·</span><a href="https://bumiatlas.com/mcp/" target="_blank" rel="noreferrer">BumiAtlas MCP</a></div>
       </aside>
 
-      <main class="main-panel">
-        <header class="topbar">
-          <nav class="nav-tabs">
-            <button class="tab active" type="button">Overview</button>
-            <button class="tab" type="button">Search</button>
-            <button class="tab" type="button">Parcels</button>
-            <button class="tab" type="button">Risk</button>
-          </nav>
+      <section class="map-workspace" aria-label="Interactive map workspace">
+        <button id="expandSidebar" class="expand-button" type="button" aria-label="Open map sidebar" title="Open sidebar">›</button>
+        <div id="map" aria-label="Map of Indonesia"></div>
+        <div class="map-title-card"><span class="map-title-icon">⌖</span><span><strong id="mapPlace">Indonesia</strong><small id="mapCoordinates">Explore the map</small></span><button id="homeButton" type="button" title="Show Indonesia" aria-label="Show Indonesia">⌂</button></div>
+        <div class="map-controls" aria-label="Map controls">
+          <button id="zoomIn" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+          <button id="zoomOut" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+          <span class="control-divider"></span>
+          <button id="fullscreenButton" type="button" aria-label="Toggle fullscreen" title="Toggle fullscreen">⛶</button>
+        </div>
+        <div class="map-attribution-note">Basemap © OpenStreetMap contributors</div>
+      </section>
+    </main>
 
-          <div class="top-actions">
-            <button class="button ghost" type="button">Share</button>
-            <a class="button primary" href="https://bumiatlas.com/mcp/" target="_blank" rel="noreferrer">Connect MCP</a>
-          </div>
-        </header>
-
-        <section class="hero-row panel">
-          <div>
-            <div class="hero-kicker">Map overview</div>
-            <h1>Indonesia land parcels and public spatial context</h1>
-          </div>
-          <div class="legend-row">
-            <span class="legend-item"><i class="dot green"></i> Parcels</span>
-            <span class="legend-item"><i class="dot amber"></i> HGU</span>
-            <span class="legend-item"><i class="dot blue"></i> Zoning</span>
-          </div>
-        </section>
-
-        <section class="map-area">
-          <div id="map"></div>
-
-          <div class="floating-card panel">
-            <div class="float-head">
-              <div>
-                <div class="mini-label">Selected parcel</div>
-                <h2 id="detailTitle">22.01.05.03.1.00123</h2>
-              </div>
-              <span class="badge warning">Needs review</span>
-            </div>
-
-            <dl class="detail-grid">
-              <div>
-                <dt>Right type</dt>
-                <dd>Hak Milik</dd>
-              </div>
-              <div>
-                <dt>Area</dt>
-                <dd>1,204 m²</dd>
-              </div>
-              <div>
-                <dt>Declared</dt>
-                <dd>1,150 m²</dd>
-              </div>
-              <div>
-                <dt>Village</dt>
-                <dd>Kel. Menteng</dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-      </main>
-    </div>
-
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="./script.js"></script>
   </body>

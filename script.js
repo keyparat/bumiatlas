@@ -1,129 +1,126 @@
-const map = L.map("map", {
-  zoomControl: true,
-  attributionControl: true,
-  preferCanvas: true,
-}).setView([-2.5489, 118.0149], 5);
-
+const INDONESIA_CENTER = [-2.5489, 118.0149];
+const map = L.map("map", { zoomControl: false, scrollWheelZoom: true }).setView(INDONESIA_CENTER, 5);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  maxZoom: 19
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
 }).addTo(map);
 
-const parcelSamples = [
-  { code: "22.01.05.03.1.00123", lat: -6.2000, lng: 106.8167, type: "Hak Milik", city: "Jakarta", tone: "green", status: "Open" },
-  { code: "26.01.02.06.1.00444", lat: -7.7820, lng: 110.3670, type: "Hak Guna Bangunan", city: "Yogyakarta", tone: "amber", status: "Review" },
-  { code: "31.01.10.03.1.01280", lat: -8.6746, lng: 115.2120, type: "Hak Pakai", city: "Bali", tone: "green", status: "Open" },
-  { code: "18.05.11.02.1.00671", lat: -6.9207, lng: 107.6060, type: "Hak Milik", city: "Bandung", tone: "blue", status: "Risk" },
-  { code: "12.01.04.12.1.01318", lat: -2.9910, lng: 104.7560, type: "Hak Pengelolaan", city: "Palembang", tone: "green", status: "Open" }
-];
-
-const parcelLayer = L.layerGroup().addTo(map);
-
-parcelSamples.forEach((parcel) => {
-  const circle = L.circleMarker([parcel.lat, parcel.lng], {
-    radius: parcel.tone === "amber" ? 7 : 8,
-    color: parcel.tone === "green" ? "#1d7a4f" : parcel.tone === "amber" ? "#d2a647" : "#3f77c7",
-    fillColor: parcel.tone === "green" ? "#1d7a4f" : parcel.tone === "amber" ? "#d2a647" : "#3f77c7",
-    fillOpacity: 0.8,
-    weight: 2
-  }).addTo(parcelLayer);
-
-  circle.bindPopup(`
-    <div style="font-family: Inter, sans-serif; min-width: 180px;">
-      <strong>${parcel.code}</strong><br>
-      <span>${parcel.type}</span><br>
-      <small>${parcel.city}</small>
-    </div>
-  `);
-
-  circle.on("click", () => {
-    document.getElementById("detailTitle").textContent = parcel.code;
-  });
-});
-
-function renderResults(items) {
-  const list = document.getElementById("resultList");
-  list.innerHTML = "";
-
-  items.forEach((item) => {
-    const li = document.createElement("li");
-    li.className = "result-item";
-    li.innerHTML = `
-      <div class="result-main">
-        <div class="result-code">${item.code}</div>
-        <div class="result-meta">
-          <span>${item.type}</span>
-          <span>·</span>
-          <span>${item.city}</span>
-        </div>
-      </div>
-      <span class="result-chip ${item.tone}">${item.status}</span>
-    `;
-
-    li.addEventListener("click", () => {
-      map.setView([item.lat, item.lng], 12, { animate: true });
-      document.getElementById("detailTitle").textContent = item.code;
-    });
-
-    list.appendChild(li);
-  });
+const workspace = document.querySelector(".workspace");
+const marker = L.marker(INDONESIA_CENTER);
+let toastTimer;
+function toast(message) {
+  const element = document.getElementById("toast");
+  element.textContent = message;
+  element.classList.add("visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => element.classList.remove("visible"), 3000);
 }
+function selectPoint(lat, lon, label = "Selected location") {
+  marker.setLatLng([lat, lon]).addTo(map);
+  map.setView([lat, lon], Math.max(map.getZoom(), 12), { animate: true });
+  const coordinate = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  document.getElementById("selectedCoordinates").textContent = coordinate;
+  document.getElementById("resultCount").textContent = "1 point";
+  document.getElementById("emptyState").hidden = true;
+  document.getElementById("selectionCard").hidden = false;
+  document.getElementById("mapPlace").textContent = label;
+  document.getElementById("mapCoordinates").textContent = coordinate;
+}
+map.on("click", event => selectPoint(event.latlng.lat, event.latlng.lng));
 
-renderResults(parcelSamples);
-
-const searchButton = document.getElementById("searchButton");
+const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
-const locateButton = document.getElementById("locateButton");
-const centerButton = document.getElementById("centerIndonesia");
-
-searchButton.addEventListener("click", () => {
+searchForm.addEventListener("submit", async event => {
+  event.preventDefault();
   const query = searchInput.value.trim();
-  if (!query) return;
-
-  const coordMatch = query.match(/^-?\d+(?:\.\d+)?\s*[, ]\s*-?\d+(?:\.\d+)?$/);
-  if (coordMatch) {
-    const [latString, lngString] = query.split(/[\s,]+/);
-    const lat = Number(latString);
-    const lng = Number(lngString);
-
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      map.setView([lat, lng], 12, { animate: true });
-      L.popup().setLatLng([lat, lng]).setContent(`Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`).openOn(map);
+  if (!query) {
+    toast("Enter a place name or latitude, longitude.");
+    return;
+  }
+  const coords = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (coords) {
+    const lat = Number(coords[1]);
+    const lon = Number(coords[2]);
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      toast("Coordinates are outside the valid range.");
       return;
     }
+    selectPoint(lat, lon, "Selected coordinates");
+    return;
   }
-
-  const filtered = parcelSamples.filter((item) => item.code.toLowerCase().includes(query.toLowerCase()) || item.type.toLowerCase().includes(query.toLowerCase()));
-  if (filtered.length) {
-    renderResults(filtered);
-    const first = filtered[0];
-    map.setView([first.lat, first.lng], 12, { animate: true });
-    document.getElementById("detailTitle").textContent = first.code;
+  if (/^\d{2}\.\d{2}|^\d{10,}$/.test(query) || /\bNIB\b/i.test(query)) {
+    toast("Parcel lookup is provided by BumiAtlas MCP. Connect MCP to query certificate or NIB data.");
+    return;
+  }
+  searchForm.classList.add("searching");
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("limit", "1");
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("Search service unavailable");
+    const results = await response.json();
+    if (!results.length) {
+      toast("No place found. Try a more specific name or coordinates.");
+      return;
+    }
+    selectPoint(Number(results[0].lat), Number(results[0].lon), results[0].name.split(",")[0]);
+  } catch {
+    toast("Place search is unavailable right now. You can enter coordinates instead.");
+  } finally {
+    searchForm.classList.remove("searching");
   }
 });
 
-locateButton.addEventListener("click", () => {
-  if (!navigator.geolocation) return;
+document.getElementById("locateButton").addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    toast("This browser does not support location access.");
+    return;
+  }
   navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const { latitude, longitude } = position.coords;
-      map.setView([latitude, longitude], 12, { animate: true });
-      L.popup().setLatLng([latitude, longitude]).setContent("Your location").openOn(map);
-    },
-    () => {
-      map.setView([-2.5489, 118.0149], 5, { animate: true });
-    }
+    position => selectPoint(position.coords.latitude, position.coords.longitude, "Your location"),
+    () => toast("Location permission was unavailable. Check your browser settings."),
+    { enableHighAccuracy: true, timeout: 10000 }
   );
 });
-
-centerButton.addEventListener("click", () => {
-  map.setView([-2.5489, 118.0149], 5, { animate: true });
+document.getElementById("homeButton").addEventListener("click", () => {
+  map.setView(INDONESIA_CENTER, 5, { animate: true });
+  marker.remove();
+  document.getElementById("mapPlace").textContent = "Indonesia";
+  document.getElementById("mapCoordinates").textContent = "Explore the map";
+  document.getElementById("resultCount").textContent = "No selection";
+  document.getElementById("emptyState").hidden = false;
+  document.getElementById("selectionCard").hidden = true;
+});
+document.getElementById("zoomIn").addEventListener("click", () => map.zoomIn());
+document.getElementById("zoomOut").addEventListener("click", () => map.zoomOut());
+document.getElementById("fullscreenButton").addEventListener("click", async () => {
+  const target = document.querySelector(".map-workspace");
+  try {
+    if (!document.fullscreenElement) await target.requestFullscreen();
+    else await document.exitFullscreen();
+    setTimeout(() => map.invalidateSize(), 100);
+  } catch { toast("Fullscreen is not available in this browser."); }
+});
+document.getElementById("copyCoordinates").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(document.getElementById("selectedCoordinates").textContent);
+    toast("Coordinates copied.");
+  } catch { toast("Could not copy coordinates."); }
 });
 
-map.on("moveend", () => {
-  const center = map.getCenter();
-  const title = document.getElementById("detailTitle");
-  if (title) {
-    title.textContent = `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
-  }
+document.querySelectorAll(".layer-row").forEach(button => {
+  button.addEventListener("click", () => {
+    if (button.dataset.layer !== "streets") {
+      window.open("https://bumiatlas.com/mcp/", "_blank", "noopener,noreferrer");
+      toast("This preview has no parcel overlay. Connect to BumiAtlas MCP for land-data tools.");
+      return;
+    }
+    button.classList.add("active");
+    button.setAttribute("aria-pressed", "true");
+  });
 });
+document.getElementById("resetLayers").addEventListener("click", () => toast("Street map is the only layer in this preview."));
+document.getElementById("collapseSidebar").addEventListener("click", () => workspace.classList.add("sidebar-collapsed"));
+document.getElementById("expandSidebar").addEventListener("click", () => workspace.classList.remove("sidebar-collapsed"));
