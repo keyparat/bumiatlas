@@ -5,17 +5,17 @@ import {
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
-  const provider = new BumiAtlasOAuthProvider(getSession(req), getRedirectUri(req));
+  const provider = new BumiAtlasOAuthProvider(await getSession(req), getRedirectUri(req));
   let client, transport;
   try {
     ({ client, transport } = await createMcpClient(provider));
     await client.connect(transport);
     const tools = await client.listTools();
-    setSession(res, provider.data, req);
+    await setSession(res, provider.data, req);
     return res.redirect(302, "/");
   } catch (error) {
     if (provider.authorizationUrl) {
-      try { setSession(res, provider.data, req); }
+      try { await setSession(res, provider.data, req); }
       catch (cookieError) { return sendJson(res, 500, { error: cookieError.message }); }
       return res.redirect(302, provider.authorizationUrl);
     }
