@@ -5,7 +5,7 @@ import {
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
-  const data = getSession(req);
+  const data = await getSession(req);
   if (!data.tokens?.access_token) return sendJson(res, 200, { connected: false });
 
   const provider = new BumiAtlasOAuthProvider(data, getRedirectUri(req));
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     ({ client, transport } = await createMcpClient(provider));
     await client.connect(transport);
     const result = await client.listTools();
-    setSession(res, provider.data, req);
+    await setSession(res, provider.data, req);
     return sendJson(res, 200, { connected: true, tools: result.tools || [] });
   } catch (error) {
     console.error("MCP status check failed:", error);
