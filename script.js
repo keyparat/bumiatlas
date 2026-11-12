@@ -541,14 +541,11 @@ function showParcelDetail(feature, layer) {
   });
   const download = document.createElement("button");
   download.type = "button"; download.className = "parcel-download-button";
-  download.textContent = "↓ Unduh GeoJSON";
-  download.addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(feature, null, 2)], { type: "application/geo+json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = "persil-" + String(props.nib || props.id || "bumiatlas") + ".geojson";
-    link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
+  download.textContent = "↓ Unduh bidang (GeoJSON)";
+  download.addEventListener("click", () => downloadBlob(
+    new Blob([JSON.stringify(feature, null, 2)], { type: "application/geo+json" }),
+    "persil-" + String(props.nib || props.id || "bumiatlas") + ".geojson"
+  ));
   popup.append(download);
   if (layer) layer.bindPopup(popup, { maxWidth: 280 }).openPopup();
   else L.popup({ maxWidth: 280 }).setLatLng(map.getCenter()).setContent(popup).openOn(map);
@@ -626,3 +623,112 @@ disconnectMcpButton.addEventListener("click", async () => {
     toast("Autentikasi BumiAtlas gagal.");
   }
 })();
+
+
+function collectLayerFeatures(group) {
+  const features = [];
+  group.eachLayer(layer => {
+    const value = layer.toGeoJSON();
+    if (value.type === "FeatureCollection") features.push(...value.features);
+    else if (value.type === "Feature") features.push(value);
+    else if (value.type && value.coordinates) features.push({ type: "Feature", geometry: value, properties: {} });
+  });
+  return features;
+}
+
+function getExportFeatures(scope = "visible") {
+  const remote = collectLayerFeatures(remoteParcelLayers);
+  const digitized = collectLayerFeatures(parcelLayers);
+  const selected = scope === "digitized" ? digitized : scope === "all" ? [...remote, ...digitized] : remote;
+  return selected.map((feature, index) => ({
+    ...feature,
+    properties: { ...(feature.properties || {}), _source: scope === "all" ? (index < remote.length ? "BumiAtlas MCP" : "Digitasi lokal") : scope === "digitized" ? "Digitasi lokal" : "BumiAtlas MCP" }
+  }));
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function toKml(features) {
+  const escapeXml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&apos;" }[char]));
+  const coordinates = ring => ring.map(([lon, lat, alt]) => [lon, lat, alt ?? 0].join(",")).join(" ");
+  const geometryXml = geometry => {
+    if (!geometry) return "";
+    if (geometry.type === "Polygon") return "<Polygon><outerBoundaryIs><LinearRing><coordinates>" + coordinates(geometry.coordinates[0]) + "</coordinates></LinearRing></outerBoundaryIs>" + geometry.coordinates.slice(1).map(ring => "<innerBoundaryIs><LinearRing><coordinates>" + coordinates(ring) + "</coordinates></LinearRing></innerBoundaryIs>").join("") + "</Polygon>";
+    if (geometry.type === "MultiPolygon") return "<MultiGeometry>" + geometry.coordinates.map(coords => geometryXml({ type: "Polygon", coordinates: coords })).join("") + "</MultiGeometry>";
+    if (geometry.type === "Point") return "<Point><coordinates>" + coordinates([geometry.coordinates]) + "</coordinates></Point>";
+    if (geometry.type === "LineString") return "<LineString><coordinates>" + coordinates(geometry.coordinates) + "</coordinates></LineString>";
+    return "";
+  };
+  const placemarks = features.map(feature => {
+    const props = feature.properties || {};
+    const name = props.nib || props.label || props.nomor || props.id || "Bidang tanah";
+    const description = Object.entries(props).map(([key, value]) => key + ": " + (typeof value === "object" ? JSON.stringify(value) : value)).join("\n");
+    return "<Placemark><name>" + escapeXml(name) + "</name><description>" + escapeXml(description) + "</description>" + geometryXml(feature.geometry) + "</Placemark>";
+  }).join("");
+  return '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>BumiAtlas GIS</name>' + placemarks + "</Document></kml>";
+}
+
+async function exportDataset() {
+  const scope = document.getElementById("exportScope").value;
+  const format = document.getElementById("exportFormat").value;
+  const features = getExportFeatures(scope);
+  if (!features.length) {
+    toast(scope === "digitized" ? "Belum ada bidang hasil digitasi." : "Belum ada bidang yang dapat diunduh. Aktifkan layer persil dan zoom ke area data.");
+    return;
+  }
+  const collection = { type: "FeatureCollection", name: "bumiatlas-bidang", features };
+  const base = "bumiatlas-" + scope + "-" + new Date().toISOString().slice(0, 10);
+  try {
+    if (format === "geojson" || format === "json") {
+      downloadBlob(new Blob([JSON.stringify(collection, null, 2)], { type: format === "json" ? "application/json" : "application/geo+json" }), base + (format === "json" ? ".json" : ".geojson"));
+    } else if (format === "kml") {
+      downloadBlob(new Blob([toKml(features)], { type: "application/vnd.google-earth.kml+xml" }), base + ".kml");
+    } else if (format === "shp") {
+      const module = await import("shp-write");
+      const shpwrite = module.default || module;
+      const zipBlob = await shpwrite.zip(collection, { folder: "bumiatlas", types: { polygon: "bidang", point: "titik", line: "garis" } });
+      downloadBlob(zipBlob instanceof Blob ? zipBlob : new Blob([zipBlob], { type: "application/zip" }), base + ".zip");
+    } else if (format === "pdf") {
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      pdf.setFontSize(16); pdf.text("Laporan Data Bidang Tanah - BumiAtlas", 14, 16);
+      pdf.setFontSize(9); pdf.text("Tanggal: " + new Date().toLocaleString("id-ID") + " | Jumlah bidang: " + features.length, 14, 23);
+      const columns = ["No", "NIB", "Nomor Sertifikat", "Jenis Hak", "Luas (m²)", "Tahun", "Desa"];
+      const widths = [10, 43, 40, 28, 25, 18, 55];
+      let y = 32;
+      const drawRow = (values, header = false) => {
+        let x = 14;
+        pdf.setFont(undefined, header ? "bold" : "normal");
+        values.forEach((value, index) => {
+          const width = widths[index];
+          if (header) { pdf.setFillColor(232, 239, 233); pdf.rect(x, y - 5, width, 8, "F"); }
+          pdf.text(String(value ?? "—").slice(0, 36), x + 1.5, y, { maxWidth: width - 3 });
+          x += width;
+        });
+        y += 8;
+      };
+      drawRow(columns, true);
+      features.forEach((feature, index) => {
+        if (y > 185) { pdf.addPage(); y = 18; }
+        const p = feature.properties || {};
+        drawRow([index + 1, p.nib || p.label || "—", p.nomor || p.shm || "—", p.tipehak || "—", p.luas ?? p.luasHitung ?? "—", p.tahun || "—", p.desa || p.wilayah?.lokasi || "—"]);
+      });
+      pdf.save(base + ".pdf");
+    }
+    toast(features.length + " bidang berhasil disiapkan untuk unduhan " + format.toUpperCase() + ".");
+  } catch (error) {
+    console.error("Dataset export failed:", error);
+    toast("Ekspor " + format.toUpperCase() + " gagal: " + (error.message || "format tidak dapat dibuat."));
+  }
+}
+
+document.getElementById("downloadDataset").addEventListener("click", exportDataset);
