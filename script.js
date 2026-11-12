@@ -1,57 +1,50 @@
-const initialCenter = [-2.5489, 118.0149];
-const initialZoom = 5;
-
 const map = L.map("map", {
   zoomControl: true,
   attributionControl: true,
-  preferCanvas: true
-}).setView(initialCenter, initialZoom);
+  preferCanvas: true,
+}).setView([-2.5489, 118.0149], 5);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19
 }).addTo(map);
 
-const sampleParcels = [
-  { code: "22.01.05.03.1.00123", lat: -6.2000, lng: 106.8167, type: "Hak Milik", open: true },
-  { code: "26.01.02.06.1.00444", lat: -7.7820, lng: 110.3670, type: "Hak Guna Bangunan", open: false },
-  { code: "31.01.10.03.1.01280", lat: -8.6746, lng: 115.2120, type: "Hak Pakai", open: true },
-  { code: "18.05.11.02.1.00671", lat: -6.9207, lng: 107.6060, type: "Hak Milik", open: false },
-  { code: "12.01.04.12.1.01318", lat: -2.9910, lng: 104.7560, type: "Hak Pengelolaan", open: true }
+const parcelSamples = [
+  { code: "22.01.05.03.1.00123", lat: -6.2000, lng: 106.8167, type: "Hak Milik", city: "Jakarta", tone: "green", status: "Open" },
+  { code: "26.01.02.06.1.00444", lat: -7.7820, lng: 110.3670, type: "Hak Guna Bangunan", city: "Yogyakarta", tone: "amber", status: "Review" },
+  { code: "31.01.10.03.1.01280", lat: -8.6746, lng: 115.2120, type: "Hak Pakai", city: "Bali", tone: "green", status: "Open" },
+  { code: "18.05.11.02.1.00671", lat: -6.9207, lng: 107.6060, type: "Hak Milik", city: "Bandung", tone: "blue", status: "Risk" },
+  { code: "12.01.04.12.1.01318", lat: -2.9910, lng: 104.7560, type: "Hak Pengelolaan", city: "Palembang", tone: "green", status: "Open" }
 ];
 
 const parcelLayer = L.layerGroup().addTo(map);
 
-sampleParcels.forEach((parcel) => {
-  const marker = L.circleMarker([parcel.lat, parcel.lng], {
-    radius: parcel.open ? 8 : 6,
-    color: parcel.open ? "#1f7a4b" : "#d3a73d",
-    fillColor: parcel.open ? "#1f7a4b" : "#d3a73d",
+parcelSamples.forEach((parcel) => {
+  const circle = L.circleMarker([parcel.lat, parcel.lng], {
+    radius: parcel.tone === "amber" ? 7 : 8,
+    color: parcel.tone === "green" ? "#1d7a4f" : parcel.tone === "amber" ? "#d2a647" : "#3f77c7",
+    fillColor: parcel.tone === "green" ? "#1d7a4f" : parcel.tone === "amber" ? "#d2a647" : "#3f77c7",
     fillOpacity: 0.8,
     weight: 2
   }).addTo(parcelLayer);
 
-  marker.bindPopup(`
+  circle.bindPopup(`
     <div style="font-family: Inter, sans-serif; min-width: 180px;">
       <strong>${parcel.code}</strong><br>
       <span>${parcel.type}</span><br>
-      <small>${parcel.lat.toFixed(4)}, ${parcel.lng.toFixed(4)}</small>
+      <small>${parcel.city}</small>
     </div>
   `);
 
-  marker.on("click", () => {
+  circle.on("click", () => {
     document.getElementById("detailTitle").textContent = parcel.code;
   });
 });
 
-const searchButton = document.getElementById("searchButton");
-const searchInput = document.getElementById("searchInput");
-const locateButton = document.getElementById("locateButton");
-const centerIndonesiaButton = document.getElementById("centerIndonesia");
-const resultList = document.getElementById("resultList");
-
 function renderResults(items) {
-  resultList.innerHTML = "";
+  const list = document.getElementById("resultList");
+  list.innerHTML = "";
+
   items.forEach((item) => {
     const li = document.createElement("li");
     li.className = "result-item";
@@ -64,37 +57,35 @@ function renderResults(items) {
           <span>${item.city}</span>
         </div>
       </div>
-      <span class="result-badge ${item.tone}">${item.status}</span>
+      <span class="result-chip ${item.tone}">${item.status}</span>
     `;
+
     li.addEventListener("click", () => {
-      map.setView([item.lat, item.lng], 13, { animate: true });
+      map.setView([item.lat, item.lng], 12, { animate: true });
       document.getElementById("detailTitle").textContent = item.code;
     });
-    resultList.appendChild(li);
+
+    list.appendChild(li);
   });
 }
 
-function buildStaticResults() {
-  const items = [
-    { code: "22.01.05.03.1.00123", lat: -6.2000, lng: 106.8167, type: "Hak Milik", city: "Jakarta", status: "Open", tone: "green" },
-    { code: "26.01.02.06.1.00444", lat: -7.7820, lng: 110.3670, type: "HGB", city: "Yogyakarta", status: "Review", tone: "amber" },
-    { code: "31.01.10.03.1.01280", lat: -8.6746, lng: 115.2120, type: "Hak Pakai", city: "Bali", status: "Open", tone: "green" },
-    { code: "18.05.11.02.1.00671", lat: -6.9207, lng: 107.6060, type: "Hak Milik", city: "Bandung", status: "Risk", tone: "blue" },
-    { code: "12.01.04.12.1.01318", lat: -2.9910, lng: 104.7560, type: "HPL", city: "Palembang", status: "Open", tone: "green" }
-  ];
-  renderResults(items);
-}
+renderResults(parcelSamples);
 
-buildStaticResults();
+const searchButton = document.getElementById("searchButton");
+const searchInput = document.getElementById("searchInput");
+const locateButton = document.getElementById("locateButton");
+const centerButton = document.getElementById("centerIndonesia");
 
 searchButton.addEventListener("click", () => {
   const query = searchInput.value.trim();
   if (!query) return;
 
-  if (/^-?\d+(?:\.\d+)?\s*[, ]\s*-?\d+(?:\.\d+)?$/.test(query)) {
-    const [latStr, lngStr] = query.split(/[\s,]+/);
-    const lat = Number(latStr);
-    const lng = Number(lngStr);
+  const coordMatch = query.match(/^-?\d+(?:\.\d+)?\s*[, ]\s*-?\d+(?:\.\d+)?$/);
+  if (coordMatch) {
+    const [latString, lngString] = query.split(/[\s,]+/);
+    const lat = Number(latString);
+    const lng = Number(lngString);
+
     if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
       map.setView([lat, lng], 12, { animate: true });
       L.popup().setLatLng([lat, lng]).setContent(`Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`).openOn(map);
@@ -102,41 +93,37 @@ searchButton.addEventListener("click", () => {
     }
   }
 
-  const val = query.toLowerCase();
-  const matching = sampleParcels.filter((item) => item.code.toLowerCase().includes(val) || item.type.toLowerCase().includes(val));
-  if (matching.length > 0) {
-    const first = matching[0];
+  const filtered = parcelSamples.filter((item) => item.code.toLowerCase().includes(query.toLowerCase()) || item.type.toLowerCase().includes(query.toLowerCase()));
+  if (filtered.length) {
+    renderResults(filtered);
+    const first = filtered[0];
     map.setView([first.lat, first.lng], 12, { animate: true });
     document.getElementById("detailTitle").textContent = first.code;
   }
 });
 
 locateButton.addEventListener("click", () => {
-  if (!navigator.geolocation) {
-    return;
-  }
-
+  if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const { latitude, longitude } = pos.coords;
+    (position) => {
+      const { latitude, longitude } = position.coords;
       map.setView([latitude, longitude], 12, { animate: true });
       L.popup().setLatLng([latitude, longitude]).setContent("Your location").openOn(map);
     },
     () => {
-      map.setView(initialCenter, initialZoom, { animate: true });
+      map.setView([-2.5489, 118.0149], 5, { animate: true });
     }
   );
 });
 
-centerIndonesiaButton.addEventListener("click", () => {
-  map.setView(initialCenter, initialZoom, { animate: true });
+centerButton.addEventListener("click", () => {
+  map.setView([-2.5489, 118.0149], 5, { animate: true });
 });
 
 map.on("moveend", () => {
   const center = map.getCenter();
-  const label = `Lat ${center.lat.toFixed(3)}, Lng ${center.lng.toFixed(3)}`;
-  const meta = document.querySelector(".map-label");
-  if (meta) {
-    meta.textContent = label;
+  const title = document.getElementById("detailTitle");
+  if (title) {
+    title.textContent = `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
   }
 });
