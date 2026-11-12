@@ -1,5 +1,7 @@
 // Same-origin relay for BumiAtlas MCP and OAuth metadata/token HTTP requests.
 // This avoids browser CORS restrictions without turning this endpoint into an open proxy.
+export const config = { api: { bodyParser: false } };
+
 const UPSTREAM_ORIGIN = "https://bumiatlas.com";
 const ALLOWED_METHODS = new Set(["GET", "POST", "DELETE", "OPTIONS"]);
 const FORWARDED_REQUEST_HEADERS = [
