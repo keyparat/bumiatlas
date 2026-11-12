@@ -2,11 +2,12 @@ export const config = { api: { bodyParser: false } };
 
 import {
   BumiAtlasOAuthProvider, createMcpClient, getRedirectUri,
-  getSession, sendJson, setSession
+  getSession, isSameOriginRequest, sendJson, setSession
 } from "../../lib/mcp-session.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed" });
+  if (!isSameOriginRequest(req)) return sendJson(res, 403, { error: "Permintaan lintas origin ditolak." });
   const data = getSession(req);
   if (!data.tokens?.access_token) return sendJson(res, 401, { error: "Hubungkan akun BumiAtlas terlebih dahulu." });
 
