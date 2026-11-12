@@ -71,6 +71,16 @@
             <input id="geojsonFile" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden />
             <button class="editor-button" id="exportGeoJSON" type="button">↓ Ekspor GeoJSON</button>
           </div>
+          <div class="export-tools">
+            <label>Data yang akan diunduh
+              <select id="exportScope"><option value="visible">Persil dari MCP yang tampil</option><option value="digitized">Bidang hasil digitasi</option><option value="all">Semua bidang (MCP + digitasi)</option></select>
+            </label>
+            <label>Format unduhan
+              <select id="exportFormat"><option value="geojson">GeoJSON (.geojson)</option><option value="json">JSON (.json)</option><option value="kml">KML (.kml)</option><option value="shp">Shapefile (.zip)</option><option value="pdf">PDF (laporan atribut)</option></select>
+            </label>
+            <button class="editor-button primary" id="downloadDataset" type="button">↓ Unduh data</button>
+            <p class="editor-hint">Shapefile diunduh sebagai ZIP berisi SHP, SHX, DBF, dan PRJ. PDF berisi tabel atribut; gunakan format spasial untuk geometri.</p>
+          </div>
           <div class="parcel-fields">
             <label>NIB / Nomor bidang<input id="parcelNIB" placeholder="Masukkan NIB" /></label>
             <label>Nomor SHM<input id="parcelSHM" placeholder="Nomor sertifikat (opsional)" /></label>
