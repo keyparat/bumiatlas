@@ -1,3 +1,5 @@
+import { connectBumiAtlas, disconnectBumiAtlas, callBumiAtlasTool, getBumiAtlasStatus } from "./mcp-client.js";
+
 const INDONESIA_CENTER = [-2.5489, 118.0149];
 const map = L.map("map", { zoomControl: false, scrollWheelZoom: true }).setView(INDONESIA_CENTER, 5);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -49,7 +51,7 @@ searchForm.addEventListener("submit", async event => {
     return;
   }
   if (/^\d{2}\.\d{2}|^\d{10,}$/.test(query) || /\bNIB\b/i.test(query)) {
-    toast("Parcel lookup is provided by BumiAtlas MCP. Connect MCP to query certificate or NIB data.");
+    searchParcel(query);
     return;
   }
   searchForm.classList.add("searching");
