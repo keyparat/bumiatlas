@@ -7,11 +7,11 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
   const params = new URL(req.url, "https://local.invalid").searchParams;
   if (params.has("error")) {
-    clearSession(res);
+    await clearSession(req, res);
     return res.redirect(302, "/?mcp_error=authorization_denied");
   }
 
-  const data = getSession(req);
+  const data = await getSession(req);
   if (!data.lastState || params.get("state") !== data.lastState) {
     clearSession(res);
     return res.redirect(302, "/?mcp_error=invalid_oauth_state");
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   try {
     ({ client, transport } = await createMcpClient(provider));
     await transport.finishAuth(params);
-    setSession(res, provider.data, req);
+    await setSession(res, provider.data, req);
     return res.redirect(302, "/");
   } catch (error) {
     console.error("MCP OAuth callback failed:", error);
