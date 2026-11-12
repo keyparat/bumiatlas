@@ -1,4 +1,4 @@
-import { connectBumiAtlas, disconnectBumiAtlas, callBumiAtlasTool, getBumiAtlasStatus } from "./mcp-client.js";
+import { connectBumiAtlas, initializeBumiAtlas, disconnectBumiAtlas, callBumiAtlasTool, getBumiAtlasStatus } from "./mcp-client.js";
 
 const INDONESIA_CENTER = [-2.5489, 118.0149];
 const map = L.map("map", { zoomControl: false, scrollWheelZoom: true }).setView(INDONESIA_CENTER, 5);
@@ -50,7 +50,7 @@ searchForm.addEventListener("submit", async event => {
     selectPoint(lat, lon, "Selected coordinates");
     return;
   }
-  if (/^\d{2}\.\d{2}|^\d{10,}$/.test(query) || /\bNIB\b/i.test(query)) {
+  if (/^\d{4,14}$/.test(query) || /\bNIB\b/i.test(query)) {
     searchParcel(query);
     return;
   }
@@ -229,3 +229,174 @@ document.getElementById("exportGeoJSON").addEventListener("click", () => {
   toast(`${features.length} bidang diekspor ke GeoJSON.`);
 });
 updateFeatureCount();
+
+
+// Authenticated parcel lookup against the official BumiAtlas MCP service.
+const remoteParcelLayers = L.featureGroup().addTo(map);
+const mcpStatusEl = document.getElementById("mcpStatus");
+const connectMcpButton = document.getElementById("connectMcp");
+const disconnectMcpButton = document.getElementById("disconnectMcp");
+const parcelResultsEl = document.getElementById("parcelResults");
+const mcpToolsEl = document.getElementById("mcpTools");
+
+function setMcpUi(connected, tools = []) {
+  mcpStatusEl.textContent = connected ? "Terhubung" : "Belum terhubung";
+  mcpStatusEl.style.color = connected ? "#23774d" : "#9a7130";
+  connectMcpButton.hidden = connected;
+  disconnectMcpButton.hidden = !connected;
+  mcpToolsEl.hidden = !connected;
+  mcpToolsEl.textContent = connected
+    ? `Koneksi aktif · ${tools.length} tool tersedia: ${tools.map(tool => tool.name).join(", ")}`
+    : "";
+}
+function normalizeParcelList(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  for (const key of ["parcels", "results", "items", "data"]) {
+    if (Array.isArray(value[key])) return value[key];
+  }
+  if (value.id || value.nib || value.nomor) return [value];
+  return [];
+}
+function parcelLabel(parcel) {
+  return parcel.nomor || parcel.nib || parcel.id || "Persil tanpa nomor";
+}
+function showParcelResults(parcels) {
+  parcelResultsEl.replaceChildren();
+  if (!parcels.length) {
+    const empty = document.createElement("p");
+    empty.className = "editor-hint";
+    empty.textContent = "Tidak ada persil yang dikembalikan untuk pencarian ini. Cakupan data BPN dapat berbeda menurut lokasi.";
+    parcelResultsEl.append(empty);
+    return;
+  }
+  parcels.forEach((parcel, index) => {
+    const card = document.createElement("div");
+    card.className = "parcel-result";
+    const title = document.createElement("strong");
+    title.textContent = parcelLabel(parcel);
+    const detail = document.createElement("small");
+    detail.textContent = [
+      parcel.tipehak || "Jenis hak tidak tersedia",
+      parcel.nib ? `NIB: ${parcel.nib}` : "",
+      parcel.luas != null ? `Luas tertulis: ${Number(parcel.luas).toLocaleString("id-ID")} m²` : "",
+      parcel.tahun ? `Tahun: ${parcel.tahun}` : "",
+      parcel.wilayah?.lokasi || parcel.wilayah?.nomor || ""
+    ].filter(Boolean).join(" · ");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Ambil geometri & tampilkan";
+    button.addEventListener("click", () => loadParcelGeometry(parcel, button));
+    card.append(title, detail, button);
+    parcelResultsEl.append(card);
+  });
+}
+async function searchParcel(query) {
+  parcelResultsEl.replaceChildren();
+  const loading = document.createElement("p");
+  loading.className = "editor-hint";
+  loading.textContent = "Menghubungkan ke BumiAtlas MCP dan mencari persil…";
+  parcelResultsEl.append(loading);
+  try {
+    const data = await callBumiAtlasTool("Parcel_search", { query, limit: 20, radius: 50 });
+    const parcels = normalizeParcelList(data);
+    showParcelResults(parcels);
+    document.getElementById("mapPlace").textContent = "Hasil pencarian persil";
+    document.getElementById("mapCoordinates").textContent = query;
+    if (!parcels.length) toast("MCP tidak mengembalikan persil untuk pencarian tersebut.");
+    else toast(`${parcels.length} hasil persil ditemukan dari BumiAtlas MCP.`);
+  } catch (error) {
+    parcelResultsEl.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "editor-hint mcp-error";
+    message.textContent = error.message || "Pencarian MCP gagal.";
+    parcelResultsEl.append(message);
+    toast("Pencarian MCP gagal. Periksa koneksi atau autentikasi.");
+  }
+}
+function extractGeometry(value) {
+  if (!value || typeof value !== "object") return null;
+  if (["Polygon", "MultiPolygon"].includes(value.type) && Array.isArray(value.coordinates)) return value;
+  for (const key of ["geometry", "geojson", "boundary", "geom", "shape"]) {
+    let candidate = value[key];
+    if (typeof candidate === "string") {
+      try { candidate = JSON.parse(candidate); } catch { candidate = null; }
+    }
+    if (candidate?.type === "Feature") candidate = candidate.geometry;
+    if (candidate?.type === "FeatureCollection") candidate = candidate.features?.[0]?.geometry;
+    if (candidate && ["Polygon", "MultiPolygon"].includes(candidate.type)) return candidate;
+  }
+  if (value.feature) return extractGeometry(value.feature);
+  if (value.data) return extractGeometry(value.data);
+  if (value.result) return extractGeometry(value.result);
+  return null;
+}
+async function loadParcelGeometry(parcel, button) {
+  if (!parcel.id) {
+    toast("Hasil ini tidak memiliki ID persil untuk meminta geometri.");
+    return;
+  }
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Mengambil geometri…";
+  try {
+    const full = await callBumiAtlasTool("Parcel_get", { id: String(parcel.id), include_geometry: true });
+    const geometry = extractGeometry(full);
+    if (!geometry) {
+      toast("Data detail diterima, tetapi geometri GeoJSON tidak tersedia pada respons.");
+      setEditorStatus("Detail persil diterima dari MCP, namun geometri tidak ditemukan pada struktur respons.");
+      return;
+    }
+    const feature = { type: "Feature", geometry, properties: { ...parcel, ...(full || {}) } };
+    const layer = L.geoJSON(feature, { style: { color: "#c44738", weight: 3, fillColor: "#e8a39a", fillOpacity: 0.22 } });
+    remoteParcelLayers.clearLayers();
+    layer.addTo(remoteParcelLayers);
+    const bounds = layer.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [45, 45], maxZoom: 19 });
+    document.getElementById("mapPlace").textContent = parcelLabel(full || parcel);
+    document.getElementById("mapCoordinates").textContent = `Data persil dari BumiAtlas MCP · NIB ${full.nib || parcel.nib || "—"}`;
+    setEditorStatus("Geometri persil dimuat dari BumiAtlas MCP. Geometri sumber ditampilkan sebagai referensi dan tidak diubah oleh editor lokal.");
+    toast("Batas persil berhasil ditampilkan.");
+  } catch (error) {
+    toast(error.message || "Gagal mengambil geometri persil.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+connectMcpButton.addEventListener("click", async () => {
+  connectMcpButton.disabled = true;
+  connectMcpButton.textContent = "Menghubungkan…";
+  try {
+    const result = await connectBumiAtlas();
+    if (result.redirecting) return;
+    setMcpUi(true, result.tools);
+    toast("Terhubung ke BumiAtlas MCP.");
+  } catch (error) {
+    toast(error.message || "Koneksi MCP gagal. Periksa izin OAuth dan CORS server.");
+  } finally {
+    connectMcpButton.disabled = false;
+    connectMcpButton.textContent = "Hubungkan akun BumiAtlas";
+  }
+});
+disconnectMcpButton.addEventListener("click", async () => {
+  await disconnectBumiAtlas();
+  setMcpUi(false);
+  remoteParcelLayers.clearLayers();
+  parcelResultsEl.replaceChildren();
+  toast("Koneksi BumiAtlas diputus.");
+});
+(async () => {
+  try {
+    const result = await initializeBumiAtlas();
+    setMcpUi(!!result.connected, result.tools || []);
+    if (result.connected) toast("Sesi BumiAtlas MCP dipulihkan.");
+  } catch (error) {
+    setMcpUi(false);
+    const message = document.createElement("p");
+    message.className = "editor-hint mcp-error";
+    message.textContent = error.message || "Autentikasi MCP gagal.";
+    parcelResultsEl.replaceChildren(message);
+    toast("Autentikasi BumiAtlas gagal.");
+  }
+})();
