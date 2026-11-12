@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
-export const MCP_URL = "https://bumiatlas.com/mcp/parcels";
+export const MCP_URL = "https://bumiatlas.com/mcp";
 const STORAGE_KEY = "bumiatlas.mcp.oauth.session.v1";
 
 function readState() {
