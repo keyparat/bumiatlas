@@ -114,16 +114,37 @@ document.getElementById("copyCoordinates").addEventListener("click", async () =>
 
 document.querySelectorAll(".layer-row").forEach(button => {
   button.addEventListener("click", () => {
-    if (button.dataset.layer !== "streets") {
-      window.open("https://bumiatlas.com/mcp/", "_blank", "noopener,noreferrer");
-      toast("This preview has no parcel overlay. Connect to BumiAtlas MCP for land-data tools.");
+    const layerName = button.dataset.layer;
+    if (layerName === "parcels") {
+      // Parcel overlays are loaded from a specific MCP search result, not as a global tile layer.
+      document.getElementById("searchInput").focus();
+      document.getElementById("parcelResults").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const connected = document.getElementById("mcpStatus").textContent === "Terhubung";
+      toast(connected
+        ? "Masukkan NIB atau nomor sertifikat pada kolom pencarian untuk memuat batas persil."
+        : "Hubungkan akun BumiAtlas, lalu cari NIB atau nomor sertifikat untuk memuat batas persil.");
       return;
     }
-    button.classList.add("active");
-    button.setAttribute("aria-pressed", "true");
+    if (layerName !== "streets") {
+      toast("Layer tematik ini belum tersedia pada versi aplikasi saat ini.");
+      return;
+    }
+    document.querySelectorAll(".layer-row").forEach(row => {
+      const active = row === button;
+      row.classList.toggle("active", active);
+      row.setAttribute("aria-pressed", String(active));
+    });
   });
 });
-document.getElementById("resetLayers").addEventListener("click", () => toast("Street map is the only layer in this preview."));
+document.getElementById("resetLayers").addEventListener("click", () => {
+  document.querySelectorAll(".layer-row").forEach(row => {
+    const active = row.dataset.layer === "streets";
+    row.classList.toggle("active", active);
+    row.setAttribute("aria-pressed", String(active));
+  });
+  remoteParcelLayers.clearLayers();
+  toast("Tampilan peta dikembalikan ke basemap.");
+});
 document.getElementById("collapseSidebar").addEventListener("click", () => workspace.classList.add("sidebar-collapsed"));
 document.getElementById("expandSidebar").addEventListener("click", () => workspace.classList.remove("sidebar-collapsed"));
 
