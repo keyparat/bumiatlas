@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="ATR/BPN Land Parcel Lookup MCP for Indonesia — a BumiAtlas MCP endpoint for certificate, NIB, and coordinate-based parcel research."
+    />
+    <title>ATR/BPN Land Parcel Lookup MCP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="container nav">
+        <div class="brand">
+          <span class="brand-mark">B</span>
+          <span>BumiAtlas</span>
+        </div>
+        <nav>
+          <a href="#about">About</a>
+          <a href="#tools">Tools</a>
+          <a href="#connect">Connect</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container hero-grid">
+          <div>
+            <p class="eyebrow">Model Context Protocol</p>
+            <h1>ATR/BPN Land Parcel Lookup for Indonesia</h1>
+            <p class="lead">
+              Connect your AI assistant to BumiAtlas for parcel research, land certificate
+              lookup, overlap analysis, and flood-risk context.
+            </p>
+            <div class="actions">
+              <a class="primary" href="#connect">Connect MCP</a>
+              <a class="secondary" href="https://bumiatlas.com/mcp-docs/parcels" target="_blank" rel="noreferrer">Docs</a>
+            </div>
+            <ul class="stats">
+              <li><strong>Parcel search</strong><span>by NIB, certificate, or coordinate</span></li>
+              <li><strong>Overlap checks</strong><span>HGU, concession, conservation</span></li>
+              <li><strong>Flood hazard</strong><span>InaRISK risk data at point</span></li>
+            </ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <span class="dot green"></span>
+              <span class="dot orange"></span>
+              <span class="dot red"></span>
+            </div>
+            <div class="panel-body">
+              <p class="mini-label">MCP endpoint</p>
+              <code id="endpoint">https://bumiatlas.com/mcp/parcels</code>
+              <button id="copyButton" type="button">Copy URL</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="about" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <p class="eyebrow">Overview</p>
+            <h2>Research land rights and parcel context in one connection</h2>
+          </div>
+
+          <div class="feature-grid">
+            <article class="card">
+              <h3>Parcel lookup</h3>
+              <p>Search by certificate number, NIB, village code + NIB, or latitude/longitude with a radius.</p>
+            </article>
+            <article class="card">
+              <h3>Right-type details</h3>
+              <p>Review Hak Milik, HGB, HGU, HP, HPL, Wakaf, area comparisons, survey method, and village metadata.</p>
+            </article>
+            <article class="card">
+              <h3>Overlaps</h3>
+              <p>Spot overlaps with other parcels, concessions, conservation areas, and related land use features.</p>
+            </article>
+            <article class="card">
+              <h3>Image context</h3>
+              <p>Get map or street imagery for a parcel or point with parcel outlines and labels.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="tools" class="section muted">
+        <div class="container">
+          <div class="section-heading">
+            <p class="eyebrow">Available tools</p>
+            <h2>Core parcel and flood functions</h2>
+          </div>
+
+          <div class="tools-grid">
+            <div class="tool"><strong>Parcel_search</strong><span>Find parcels by certificate, NIB, or coordinates</span></div>
+            <div class="tool"><strong>Parcel_get</strong><span>Retrieve full parcel record with rights, area, and metadata</span></div>
+            <div class="tool"><strong>Parcel_overlaps</strong><span>Check overlapping land claims and protections</span></div>
+            <div class="tool"><strong>Parcel_image</strong><span>View imagery with parcel outlines and labels</span></div>
+            <div class="tool"><strong>Parcel_find_village</strong><span>Look up village codes and decode certificate numbers</span></div>
+            <div class="tool"><strong>Flood_get</strong><span>Get BNPB InaRISK flood hazard at a point</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="connect" class="section">
+        <div class="container connect-box">
+          <div>
+            <p class="eyebrow">Connect</p>
+            <h2>Add this as a custom connector in your MCP client</h2>
+            <p>
+              Use the endpoint below and sign in with Google. This endpoint is provided by BumiAtlas for parcel and land-data research.
+            </p>
+          </div>
+
+          <div class="code-box">
+            <pre><code>https://bumiatlas.com/mcp/parcels</code></pre>
+            <a href="https://bumiatlas.com/mcp-docs/parcels" target="_blank" rel="noreferrer">Open docs</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <span>ATR/BPN Land Parcel Lookup MCP</span>
+        <span>Data source: ATR/BPN land map and BPN village boundaries</span>
+      </div>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
