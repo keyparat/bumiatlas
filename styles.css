@@ -63,3 +63,8 @@ a { color:inherit; text-decoration:none; }
 .parcel-detail-row span { color:#77847b; }
 .parcel-detail-row b { text-align:right; font-weight:600; }
 .parcel-download-button { width:100%; margin-top:10px; padding:9px; border:0; border-radius:6px; background:#23774d; color:#fff; font-size:10px; font-weight:700; cursor:pointer; }
+
+.export-tools { display:grid; gap:8px; margin-top:12px; padding:10px; border:1px solid var(--line); border-radius:8px; background:#fafcf9; }
+.export-tools label { display:grid; gap:5px; color:#68756c; font-size:9px; font-weight:700; }
+.export-tools select { width:100%; padding:9px 8px; border:1px solid #dfe6df; border-radius:6px; background:#fff; color:#34463a; font-size:10px; }
+.export-tools .editor-hint { margin:0; }
