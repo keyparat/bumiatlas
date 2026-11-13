@@ -6,7 +6,7 @@ const { chromium } = require("playwright");
 const HOST = "127.0.0.1";
 const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
-const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
+const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";\nconst WFS_TARGET = "https://geosrv-app.atrbpn.go.id/geoserver/wfs";
 const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
 let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
@@ -31,7 +31,7 @@ const previewOrigin = /^https:\/\/bumiatlas-78gy-[a-z0-9-]+\.vercel\.app$/;
 
 let context;
 let ready = false;
-let layerCatalog = [];
+let layerCatalog = [];\nlet wfsCatalog = [];
 
 function allowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin) || previewOrigin.test(origin || "");
@@ -60,6 +60,44 @@ function parseLayerCatalog(xml) {
   return [...found.values()].sort((a, b) =>
     a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
   );
+}
+
+function parseWfsCatalog(xml) {
+  const found = new Map();
+  const blocks = xml.match(/<(?:\\w+:)?FeatureType\\b[^>]*>[\\s\\S]*?<\\/(?:\\w+:)?FeatureType>/g) || [];
+  for (const block of blocks) {
+    const name = block.match(/<(?:\\w+:)?Name>\\s*([^<]+?)\\s*<\\/(?:\\w+:)?Name>/);
+    const title = block.match(/<(?:\\w+:)?Title>\\s*([^<]*?)\\s*<\\/(?:\\w+:)?Title>/);
+    if (!name) continue;
+    const id = name[1].trim();
+    const namespace = id.includes(":") ? id.split(":")[0] : "Lainnya";
+    found.set(id, { id, title: (title?.[1] || id).trim(), namespace, protocol: "WFS" });
+  }
+  return [...found.values()].sort((a, b) =>
+    a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
+  );
+}
+
+function makeWfsTarget(incoming) {
+  const typeName = incoming.searchParams.get("typeName");
+  if (!typeName || !wfsCatalog.some(item => item.id === typeName)) {
+    throw new Error("Layer WFS tidak ditemukan dalam katalog.");
+  }
+  const params = new URLSearchParams();
+  params.set("service", "WFS");
+  params.set("version", "2.0.0");
+  params.set("request", "GetFeature");
+  params.set("typeNames", typeName);
+  params.set("outputFormat", "application/json");
+  params.set("srsName", "urn:ogc:def:crs:EPSG::4326");
+  params.set("count", String(Math.min(1000, Math.max(1, Number(incoming.searchParams.get("count")) || 500))));
+  const bbox = incoming.searchParams.get("bbox");
+  if (bbox) {
+    const values = bbox.split(",").map(Number);
+    if (values.length !== 4 || values.some(v => !Number.isFinite(v))) throw new Error("BBOX WFS tidak valid.");
+    params.set("bbox", values.join(",") + ",urn:ogc:def:crs:EPSG::4326");
+  }
+  return WMS_PROXY + "?" + WFS_TARGET + "?" + params.toString();
 }
 
 function toWgs84(bbox) {
