@@ -65,9 +65,6 @@ export async function GET(request) {
   }
 
   target.search = params.toString();
-
-  // ATR/BPN exposes this GeoServer through its WMSProxy gateway.
-  // The gateway expects the complete upstream URL after the question mark.
   const proxyUrl = WMS_PROXY + "?" + target.toString();
 
   try {
@@ -105,6 +102,7 @@ export async function GET(request) {
       }
     });
   } catch (error) {
+    console.error("ATR/BPN WMSProxy request failed:", error);
     return NextResponse.json(
       { error: "Tidak dapat menghubungi WMSProxy ATR/BPN.", detail: error.message },
       { status: 502 }
