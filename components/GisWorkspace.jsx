@@ -89,7 +89,11 @@ export default function GisWorkspace() {
         layers: layerName, format: "image/png", transparent: true, version: "1.1.1",
         srs: "EPSG:3857", tiled: true, opacity: 0.72, crossOrigin: true
       }) : null;
-      if (layer) {\n        layer.on("tileerror", () => setStatus("Tile ATR/BPN gagal. Periksa Connector di http://127.0.0.1:8765/health"));\n        layer.on("tileload", () => setStatus("Layer ATR/BPN tampil: " + layerName));\n        layer.addTo(map); layersRef.current[layerName] = layer;\n      }
+      if (layer) {
+        layer.on("tileerror", () => setStatus("Tile ATR/BPN gagal. Periksa Connector di http://127.0.0.1:8765/health"));
+        layer.on("tileload", () => setStatus("Layer ATR/BPN tampil: " + layerName));
+        layer.addTo(map); layersRef.current[layerName] = layer;
+      }
     }
     setActive(next);
     updateMetrics(drawnRef.current, next.length);
