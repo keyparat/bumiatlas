@@ -85,11 +85,11 @@ export default function GisWorkspace() {
       delete layersRef.current[layerName];
     } else {
       const L = window.L;
-      const layer = L?.tileLayer.wms ? L.tileLayer.wms("/api/wms", {
+      const layer = L?.tileLayer.wms ? L.tileLayer.wms("http://127.0.0.1:8765/wms", {
         layers: layerName, format: "image/png", transparent: true, version: "1.1.1",
-        srs: "EPSG:3857", tiled: true, opacity: 0.72
+        srs: "EPSG:3857", tiled: true, opacity: 0.72, crossOrigin: true
       }) : null;
-      if (layer) { layer.addTo(map); layersRef.current[layerName] = layer; }
+      if (layer) {\n        layer.on("tileerror", () => setStatus("Tile ATR/BPN gagal. Periksa Connector di http://127.0.0.1:8765/health"));\n        layer.on("tileload", () => setStatus("Layer ATR/BPN tampil: " + layerName));\n        layer.addTo(map); layersRef.current[layerName] = layer;\n      }
     }
     setActive(next);
     updateMetrics(drawnRef.current, next.length);
@@ -151,7 +151,7 @@ export default function GisWorkspace() {
       <div className="layer-group"><p className="group-label">BASEMAP</p><div className="layer-line"><span className="swatch streets"/>OpenStreetMap <span className="enabled">Aktif</span></div></div>
       <div className="layer-group"><p className="group-label">ATR/BPN · WMS</p>{OVERLAYS.map(item => <label className="layer-line" key={item.id}><input type="checkbox" checked={active.includes(item.id)} onChange={() => toggleLayer(item.id)}/><span className="swatch overlay"/><span>{item.label}</span></label>)}</div>
       <div className="layer-group"><p className="group-label">DIGITASI & DATA</p><div className="tool-count">{features} bidang digitasi</div><div className="tool-actions"><label className="tool-button">Impor GeoJSON<input type="file" accept=".geojson,.json,application/json" hidden onChange={importGeoJSON}/></label><button className="tool-button" onClick={exportGeoJSON}>Ekspor GeoJSON</button></div><p className="hint">Gunakan toolbar gambar pada peta untuk membuat dan mengedit polygon.</p></div>
-      <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN GeoServer WMS · OpenStreetMap</span><small>Layer WMS menampilkan visualisasi; bukan unduhan data vektor.</small></div>
+      <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN WMS melalui Local Connector Windows · OpenStreetMap</span><small>Jalankan local-connector/start.bat dan pastikan sesi ATR/BPN terverifikasi sebelum mengaktifkan layer.</small></div>
     </aside>
     <div className="map-panel"><div id="bumiatlas-map"/><div className="map-status"><span className="live-dot"/>{status}</div>{selected && <div className="coordinate-card"><strong>{selected.label || "Titik terpilih"}</strong><span>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</span><button onClick={() => navigator.clipboard?.writeText(selected.lat + ", " + selected.lng)}>Salin koordinat</button></div>}</div>
   </section>;
