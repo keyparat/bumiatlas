@@ -32,7 +32,7 @@ export default function GisWorkspace() {
       const data = await response.json();
       if (!Array.isArray(data.layers) || !data.layers.length) throw new Error("Katalog layer kosong");
       setCatalog(data.layers);
-      setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer tersedia");
+      setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer tersedia · WMS " + (data.wmsCount ?? "—") + " · WFS " + (data.wfsCount ?? "—"));
     } catch (error) {
       setCatalogStatus("Katalog belum tersedia · " + error.message);
     }
