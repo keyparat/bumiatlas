@@ -20,10 +20,6 @@ export default function GisWorkspace() {
   const [features, setFeatures] = useState(0);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
-  const [parcelQuery, setParcelQuery] = useState("");
-  const [parcelResults, setParcelResults] = useState([]);
-  const [parcelLoading, setParcelLoading] = useState(false);
-  const [parcelError, setParcelError] = useState("");
 
   useEffect(() => {
     let map;
@@ -125,75 +121,6 @@ export default function GisWorkspace() {
     } catch (err) { setStatus(err.message); }
   }
 
-  async function callParcelTool(tool, args) {
-    const response = await fetch("/api/mcp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tool, arguments: args })
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || "Permintaan MCP gagal.");
-    return payload.data;
-  }
-
-  function normalizeParcelList(value) {
-    if (Array.isArray(value)) return value;
-    if (!value || typeof value !== "object") return [];
-    for (const key of ["parcels", "results", "items", "data"]) {
-      if (Array.isArray(value[key])) return value[key];
-    }
-    return value.id || value.nib || value.nomor ? [value] : [];
-  }
-
-  async function searchParcels(event) {
-    event.preventDefault();
-    if (!parcelQuery.trim()) return;
-    setParcelLoading(true);
-    setParcelError("");
-    setParcelResults([]);
-    try {
-      const result = await callParcelTool("Parcel_search", { query: parcelQuery.trim(), limit: 20, radius: 50 });
-      setParcelResults(normalizeParcelList(result));
-      setStatus("Pencarian persil BumiAtlas selesai");
-    } catch (error) {
-      setParcelError(error.message);
-      setStatus("Pencarian persil gagal");
-    } finally { setParcelLoading(false); }
-  }
-
-  function findGeometry(value) {
-    if (!value || typeof value !== "object") return null;
-    if (["Polygon", "MultiPolygon"].includes(value.type) && value.coordinates) return value;
-    for (const key of ["geometry", "geojson", "boundary", "geom", "shape"]) {
-      let candidate = value[key];
-      if (typeof candidate === "string") { try { candidate = JSON.parse(candidate); } catch { candidate = null; } }
-      if (candidate?.type === "Feature") candidate = candidate.geometry;
-      if (candidate?.type === "FeatureCollection") candidate = candidate.features?.[0]?.geometry;
-      if (candidate && ["Polygon", "MultiPolygon"].includes(candidate.type)) return candidate;
-    }
-    return findGeometry(value.feature) || findGeometry(value.data) || findGeometry(value.result);
-  }
-
-  async function showParcel(parcel) {
-    if (!parcel?.id) { setParcelError("Hasil ini tidak memiliki ID persil untuk mengambil geometri."); return; }
-    setParcelError("");
-    try {
-      const detail = await callParcelTool("Parcel_get", { id: String(parcel.id), include_geometry: true });
-      const geometry = findGeometry(detail);
-      if (!geometry) { setParcelError("Detail diterima, tetapi geometri tidak tersedia pada respons."); return; }
-      const feature = { type: "Feature", geometry, properties: { ...parcel, ...(detail || {}) } };
-      const layer = window.L.geoJSON(feature, { style: { color: "#bd5144", weight: 3, fillColor: "#e8a39a", fillOpacity: 0.22 } });
-      const group = drawnRef.current;
-      if (!group) return;
-      if (!window.remoteParcelGroup) window.remoteParcelGroup = window.L.featureGroup().addTo(mapRef.current);
-      window.remoteParcelGroup.clearLayers();
-      layer.addTo(window.remoteParcelGroup);
-      const bounds = layer.getBounds();
-      if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [35, 35], maxZoom: 19 });
-      setStatus("Geometri persil berhasil dimuat dari BumiAtlas MCP");
-    } catch (error) { setParcelError(error.message); }
-  }
-
   function exportGeoJSON() {
     const group = drawnRef.current;
     if (!group) return;
@@ -223,11 +150,6 @@ export default function GisWorkspace() {
       <form className="map-search" onSubmit={findLocation}><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari lokasi / lat, lng" aria-label="Cari lokasi"/><button type="submit">Cari</button></form>
       <div className="layer-group"><p className="group-label">BASEMAP</p><div className="layer-line"><span className="swatch streets"/>OpenStreetMap <span className="enabled">Aktif</span></div></div>
       <div className="layer-group"><p className="group-label">ATR/BPN · WMS</p>{OVERLAYS.map(item => <label className="layer-line" key={item.id}><input type="checkbox" checked={active.includes(item.id)} onChange={() => toggleLayer(item.id)}/><span className="swatch overlay"/><span>{item.label}</span></label>)}</div>
-      <div className="layer-group"><p className="group-label">PENCARIAN PERSIL · BUMIATLAS MCP</p>
-        <form className="map-search" onSubmit={searchParcels}><input value={parcelQuery} onChange={e => setParcelQuery(e.target.value)} placeholder="NIB / nomor persil / kata kunci" aria-label="Cari persil"/><button type="submit" disabled={parcelLoading}>{parcelLoading ? "…" : "Cari"}</button></form>
-        {parcelError && <p className="hint" role="alert">{parcelError}</p>}
-        {parcelResults.map((parcel, index) => <div className="parcel-hit" key={parcel.id || parcel.nib || index}><strong>{parcel.nomor || parcel.nib || parcel.id || "Persil"}</strong><small>{[parcel.tipehak, parcel.nib ? "NIB: " + parcel.nib : "", parcel.luas != null ? Number(parcel.luas).toLocaleString("id-ID") + " m²" : ""].filter(Boolean).join(" · ")}</small><button type="button" className="tool-button" onClick={() => showParcel(parcel)}>Tampilkan geometri</button></div>)}
-      </div>
       <div className="layer-group"><p className="group-label">DIGITASI & DATA</p><div className="tool-count">{features} bidang digitasi</div><div className="tool-actions"><label className="tool-button">Impor GeoJSON<input type="file" accept=".geojson,.json,application/json" hidden onChange={importGeoJSON}/></label><button className="tool-button" onClick={exportGeoJSON}>Ekspor GeoJSON</button></div><p className="hint">Gunakan toolbar gambar pada peta untuk membuat dan mengedit polygon.</p></div>
       <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN GeoServer WMS · OpenStreetMap</span><small>Layer WMS menampilkan visualisasi; bukan unduhan data vektor.</small></div>
     </aside>
