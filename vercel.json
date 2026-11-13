@@ -1,5 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/mcp/callback", "destination": "/index.html" }
-  ]
-}

@@ -6,7 +6,6 @@ export default function Home() {
       <header className="topbar">
         <a className="brand" href="/"><span className="brand-mark">B</span><span>Bumi<span className="brand-muted">Atlas</span></span></a>
         <div className="topbar-center"><span className="live-dot" /> LAND INTELLIGENCE WORKSPACE</div>
-        <a className="top-link" href="https://bumiatlas.com/mcp-docs/parcels" target="_blank" rel="noreferrer">Dokumentasi ↗</a>
       </header>
       <section className="page-heading">
         <div><p className="eyebrow">GEOSPASIAL · PERTANAHAN INDONESIA</p><h1>GIS Command Center</h1><p className="subheading">Peta bidang, layer ATR/BPN, dan ringkasan data dalam satu workspace.</p></div>
