@@ -26,6 +26,8 @@ export default function GisWorkspace() {
     let base;
     let drawn;
     let L;
+    let mapContainer;
+    let mapClickHandler;
     let disposed = false;
     (async () => {
       L = (await import("leaflet")).default;
@@ -49,8 +51,8 @@ export default function GisWorkspace() {
       });
       map.on(L.Draw.Event.EDITED, () => setStatus("Geometri bidang diperbarui."));
       map.on(L.Draw.Event.DELETED, () => { setFeatures(drawn.getLayers().length); updateMetrics(drawn, active.length); });
-      const mapContainer = map.getContainer();
-      const handleMapClick = async event => {
+      mapContainer = map.getContainer();
+      mapClickHandler = async event => {
         if (event.target.closest(".leaflet-control")) return;
         const latlng = map.mouseEventToLatLng(event);
         const point = { lat: latlng.lat, lng: latlng.lng };
@@ -98,10 +100,10 @@ export default function GisWorkspace() {
         setStatus("Klik diterima, tetapi tidak ada informasi bidang pada titik ini.");
       };
       // Tangkap klik langsung dari elemen peta agar tetap terbaca meskipun event Leaflet tertahan layer gambar.
-      mapContainer.addEventListener("click", handleMapClick, true);
+      mapContainer.addEventListener("click", mapClickHandler, true);
       window.setTimeout(() => map.invalidateSize(), 150);
     })().catch(err => setStatus("Gagal memuat peta: " + err.message));
-    return () => { disposed = true; map?.remove(); mapRef.current = null; };
+    return () => { disposed = true; if (mapContainer && mapClickHandler) mapContainer.removeEventListener("click", mapClickHandler, true); map?.remove(); mapRef.current = null; };
   }, []);
 
   function updateMetrics(group, layerCount) {
