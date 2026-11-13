@@ -85,12 +85,12 @@ export default function GisWorkspace() {
       delete layersRef.current[layerName];
     } else {
       const L = window.L;
-      const layer = L?.tileLayer.wms ? L.tileLayer.wms("http://127.0.0.1:8765/wms", {
+      const layer = L?.tileLayer.wms ? L.tileLayer.wms("http://127.0.0.1:8766/wms", {
         layers: layerName, format: "image/png", transparent: true, version: "1.1.1",
         srs: "EPSG:3857", tiled: true, opacity: 0.72, crossOrigin: true
       }) : null;
       if (layer) {
-        layer.on("tileerror", () => setStatus("Tile ATR/BPN gagal. Periksa Connector di http://127.0.0.1:8765/health"));
+        layer.on("tileerror", () => setStatus("Tile ATR/BPN gagal. Periksa Connector di http://127.0.0.1:8766/health"));
         layer.on("tileload", () => setStatus("Layer ATR/BPN tampil: " + layerName));
         layer.addTo(map); layersRef.current[layerName] = layer;
       }
