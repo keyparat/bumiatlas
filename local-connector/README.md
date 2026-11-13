@@ -23,7 +23,7 @@ Connector ini menjalankan layanan WMS di komputer Windows Anda. Browser Chromium
 
 Buka alamat berikut di browser komputer yang sama:
 
-- `http://127.0.0.1:8765/health`
+- `http://127.0.0.1:8766/health`
 
 Hasil yang diharapkan memuat `"atrbpnSessionReady":true`.
 
