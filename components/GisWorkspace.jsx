@@ -49,28 +49,32 @@ export default function GisWorkspace() {
       });
       map.on(L.Draw.Event.EDITED, () => setStatus("Geometri bidang diperbarui."));
       map.on(L.Draw.Event.DELETED, () => { setFeatures(drawn.getLayers().length); updateMetrics(drawn, active.length); });
-      map.on("click", async e => {
-        const point = { lat: e.latlng.lat, lng: e.latlng.lng };
+      const mapContainer = map.getContainer();
+      const handleMapClick = async event => {
+        if (event.target.closest(".leaflet-control")) return;
+        const latlng = map.mouseEventToLatLng(event);
+        const point = { lat: latlng.lat, lng: latlng.lng };
+        setSelected(point);
         const activeLayers = Object.keys(layersRef.current);
         if (!activeLayers.length) {
-          setSelected(point);
+          setStatus("Peta diklik · koordinat berhasil dibaca");
           return;
         }
-        setStatus("Mencari detail bidang…");
+        setStatus("Klik diterima · mencari detail bidang…");
         const size = map.getSize();
         const bounds = map.getBounds();
         const sw = map.options.crs.project(bounds.getSouthWest());
         const ne = map.options.crs.project(bounds.getNorthEast());
         const bbox = [sw.x, sw.y, ne.x, ne.y].join(",");
-        const pixel = map.latLngToContainerPoint(e.latlng);
+        const pixel = map.latLngToContainerPoint(latlng);
         for (const layerName of activeLayers) {
           try {
             const geographicLayer = ["bhumi:Persil", "petabpn:PersilBerdasarkanJenisHak", "dirptm:detailhgu", "dirptm:detailhgu_mati"].includes(layerName);
             const clickX = geographicLayer
-              ? (e.latlng.lng - bounds.getWest()) / (bounds.getEast() - bounds.getWest()) * size.x
+              ? (latlng.lng - bounds.getWest()) / (bounds.getEast() - bounds.getWest()) * size.x
               : pixel.x;
             const clickY = geographicLayer
-              ? (bounds.getNorth() - e.latlng.lat) / (bounds.getNorth() - bounds.getSouth()) * size.y
+              ? (bounds.getNorth() - latlng.lat) / (bounds.getNorth() - bounds.getSouth()) * size.y
               : pixel.y;
             const params = new URLSearchParams({
               layers: layerName, bbox, width: String(size.x), height: String(size.y),
@@ -91,9 +95,10 @@ export default function GisWorkspace() {
             setStatus("Gagal mengambil detail: " + error.message);
           }
         }
-        setSelected(point);
-        setStatus("Tidak ada informasi bidang pada titik yang diklik. Coba klik bagian tengah bidang.");
-      });
+        setStatus("Klik diterima, tetapi tidak ada informasi bidang pada titik ini.");
+      };
+      // Tangkap klik langsung dari elemen peta agar tetap terbaca meskipun event Leaflet tertahan layer gambar.
+      mapContainer.addEventListener("click", handleMapClick, true);
       window.setTimeout(() => map.invalidateSize(), 150);
     })().catch(err => setStatus("Gagal memuat peta: " + err.message));
     return () => { disposed = true; map?.remove(); mapRef.current = null; };
