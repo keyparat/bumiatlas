@@ -3,17 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 
 const OVERLAYS = [
-  { id: "bhumi:Persil", label: "Persil BHUMI" },
-  { id: "petabpn:PersilBerdasarkanJenisHak", label: "Persil berdasarkan jenis hak" },
-  { id: "dirptm:detailhgu", label: "HGU aktif/detail" },
-  { id: "dirptm:detailhgu_mati", label: "HGU berakhir" },
-  { id: "rtr-online:rtrw_kabkot_3602", label: "RTRW Kabupaten Lebak" },
-  { id: "rtr-online:rtrw_kabkot_3604", label: "RTRW Kabupaten Serang" }
+  { id: "bhumi:Persil", label: "Persil BHUMI", queryable: true, srs: ["EPSG:4326"] },
+  { id: "petabpn:PersilBerdasarkanJenisHak", label: "Persil berdasarkan jenis hak", queryable: true, srs: ["EPSG:4326"] },
+  { id: "dirptm:detailhgu", label: "HGU aktif/detail", queryable: true, srs: ["EPSG:4326"] },
+  { id: "dirptm:detailhgu_mati", label: "HGU berakhir", queryable: true, srs: ["EPSG:4326"] },
+  { id: "rtr-online:rtrw_kabkot_3602", label: "RTRW Kabupaten Lebak", queryable: true, srs: ["EPSG:3857"] },
+  { id: "rtr-online:rtrw_kabkot_3604", label: "RTRW Kabupaten Serang", queryable: true, srs: ["EPSG:3857"] }
 ];
 
 export default function GisWorkspace() {
   const mapRef = useRef(null);
   const layersRef = useRef({});
+  const catalogRef = useRef(OVERLAYS);
   const drawnRef = useRef(null);
   const [active, setActive] = useState([]);
   const [catalog, setCatalog] = useState(OVERLAYS);
@@ -31,6 +32,7 @@ export default function GisWorkspace() {
       if (!response.ok) throw new Error("HTTP " + response.status);
       const data = await response.json();
       if (!Array.isArray(data.layers) || !data.layers.length) throw new Error("Katalog layer kosong");
+      catalogRef.current = data.layers;
       setCatalog(data.layers);
       setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer WMS tersedia");
     } catch (error) {
@@ -69,9 +71,20 @@ export default function GisWorkspace() {
       map.on(L.Draw.Event.DELETED, () => { setFeatures(drawn.getLayers().length); updateMetrics(drawn, active.length); });
       map.on("click", async e => {
         const point = { lat: e.latlng.lat, lng: e.latlng.lng };
-        const activeLayers = Object.keys(layersRef.current).filter(key => key.startsWith("WMS:")).map(key => key.slice(4));
+        setSelected(null);
+        const activeLayers = Object.keys(layersRef.current)
+          .filter(key => key.startsWith("WMS:"))
+          .map(key => key.slice(4));
+        const queryableLayers = activeLayers.filter(name =>
+          catalogRef.current.find(item => item.id === name)?.queryable !== false
+        );
         if (!activeLayers.length) {
-          setSelected(point);
+          setSelected({ ...point, info: "Aktifkan layer WMS untuk mencari informasi bidang." });
+          return;
+        }
+        if (!queryableLayers.length) {
+          setSelected({ ...point, info: "Layer yang aktif tidak mendukung GetFeatureInfo (queryable=0)." });
+          setStatus("Layer aktif tidak menyediakan detail objek");
           return;
         }
         setStatus("Mencari detail bidang…");
@@ -81,9 +94,10 @@ export default function GisWorkspace() {
         const ne = map.options.crs.project(bounds.getNorthEast());
         const bbox = [sw.x, sw.y, ne.x, ne.y].join(",");
         const pixel = map.latLngToContainerPoint(e.latlng);
-        for (const layerName of activeLayers) {
+        for (const layerName of queryableLayers) {
           try {
-            const geographicLayer = ["bhumi:Persil", "petabpn:PersilBerdasarkanJenisHak", "dirptm:detailhgu", "dirptm:detailhgu_mati"].includes(layerName);
+            const metadata = catalogRef.current.find(item => item.id === layerName);
+            const geographicLayer = !metadata?.srs?.includes("EPSG:3857") && metadata?.srs?.includes("EPSG:4326");
             const clickX = geographicLayer
               ? (e.latlng.lng - bounds.getWest()) / (bounds.getEast() - bounds.getWest()) * size.x
               : pixel.x;
@@ -101,7 +115,13 @@ export default function GisWorkspace() {
             const data = await response.json();
             const found = Array.isArray(data.features) ? data.features : [];
             if (found.length) {
-              setSelected({ ...point, layer: layerName, properties: found[0].properties || {}, feature: found[0] });
+              setSelected({
+                ...point,
+                layer: layerName,
+                title: metadata?.title || layerName,
+                properties: found[0].properties || {},
+                feature: found[0]
+              });
               setStatus("Detail bidang ditemukan pada " + layerName);
               return;
             }
@@ -109,7 +129,7 @@ export default function GisWorkspace() {
             setStatus("Gagal mengambil detail: " + error.message);
           }
         }
-        setSelected(point);
+        setSelected({ ...point, info: "Tidak ada informasi bidang pada titik ini. Coba klik bagian tengah polygon." });
         setStatus("Tidak ada informasi bidang pada titik yang diklik. Coba klik bagian tengah bidang.");
       });
       window.setTimeout(() => map.invalidateSize(), 150);
@@ -236,6 +256,6 @@ export default function GisWorkspace() {
       <div className="layer-group"><p className="group-label">DIGITASI & DATA</p><div className="tool-count">{features} bidang digitasi</div><div className="tool-actions"><label className="tool-button">Impor GeoJSON<input type="file" accept=".geojson,.json,application/json" hidden onChange={importGeoJSON}/></label><button className="tool-button" onClick={exportGeoJSON}>Ekspor GeoJSON</button></div><p className="hint">Gunakan toolbar gambar pada peta untuk membuat dan mengedit polygon.</p></div>
       <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN WMS melalui Local Connector Windows · OpenStreetMap</span><small>Jalankan local-connector/start.bat dan pastikan sesi ATR/BPN terverifikasi sebelum mengaktifkan layer.</small></div>
     </aside>
-    <div className="map-panel"><div id="bumiatlas-map"/><div className="map-status"><span className="live-dot"/>{status}</div>{selected && <div className="coordinate-card"><div className="detail-heading"><div><p className="detail-eyebrow">INFORMASI OBJEK</p><strong>{selected.properties?.nib || selected.properties?.NIB || selected.properties?.nomor || selected.label || "Detail titik / bidang"}</strong></div><button className="detail-close" aria-label="Tutup detail" onClick={() => setSelected(null)}>×</button></div><span className="detail-coordinates">{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</span>{selected.layer && <small className="detail-layer">{selected.layer}</small>}{selected.properties && <dl className="feature-properties">{Object.entries(selected.properties).slice(0, 60).map(([key, value]) => <div key={key}><dt>{key.replace(/_/g, " ").replace(/\b\w/g, ch => ch.toUpperCase())}</dt><dd>{value == null || value === "" ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>}<button className="detail-copy" onClick={() => navigator.clipboard?.writeText(JSON.stringify(selected.properties || {lat:selected.lat,lng:selected.lng}, null, 2))}>Salin detail</button></div>}</div>
+    <div className="map-panel"><div id="bumiatlas-map"/><div className="map-status"><span className="live-dot"/>{status}</div>{selected && <div className="coordinate-card"><div className="detail-heading"><div><p className="detail-eyebrow">INFORMASI OBJEK</p><strong>{selected.title || selected.properties?.nib || selected.properties?.NIB || selected.properties?.nomor || selected.label || "Detail titik / bidang"}</strong></div><button type="button" className="detail-close" aria-label="Tutup detail" title="Tutup detail" onClick={() => setSelected(null)}>×</button></div><span className="detail-coordinates">{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</span>{selected.layer && <small className="detail-layer">{selected.layer}</small>}{selected.info && <p className="detail-info">{selected.info}</p>}{selected.properties && Object.keys(selected.properties).length > 0 && <dl className="feature-properties">{Object.entries(selected.properties).slice(0, 80).map(([key, value]) => <div key={key}><dt>{key.replace(/_/g, " ").replace(/\b\w/g, ch => ch.toUpperCase())}</dt><dd>{value == null || value === "" ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>}{selected.properties && Object.keys(selected.properties).length > 0 && <button type="button" className="detail-copy" onClick={() => navigator.clipboard?.writeText(JSON.stringify(selected.properties, null, 2))}>Salin detail</button>}</div>}</div>
   </section>;
 }
