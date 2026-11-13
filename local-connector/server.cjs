@@ -168,6 +168,33 @@ async function main() {
   console.log("\n=== BumiAtlas Local Connector ===");
   console.log("Hanya menerima koneksi dari komputer ini (127.0.0.1).");
   console.log("Tidak mengirim password atau cookie ke GitHub/Vercel.\n");
+
+  // Claim the local port before opening Chromium. If another process owns it,
+  // fail gracefully without launching a browser that would immediately close.
+  await new Promise((resolve, reject) => {
+    const onError = error => {
+      server.off("listening", onListening);
+      if (error.code === "EADDRINUSE") {
+        reject(new Error(
+          "Port " + PORT + " sedang digunakan. Periksa http://" + HOST + ":" + PORT +
+          "/health. Jika itu Connector lama, gunakan jendela tersebut. Jika bukan, tutup proses lama lalu jalankan kembali."
+        ));
+      } else {
+        reject(error);
+      }
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(PORT, HOST);
+  });
+
+  console.log("Connector aktif: http://" + HOST + ":" + PORT);
+  console.log("Membuka browser login ATR/BPN...");
+
   context = await chromium.launchPersistentContext(
     path.join(__dirname, ".atrbpn-browser-profile"),
     { headless: false, viewport: { width: 1360, height: 900 } }
@@ -176,13 +203,11 @@ async function main() {
   const page = pages[0] || await context.newPage();
   await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(err => {
     console.log("Halaman awal belum terbuka otomatis:", err.message);
+    console.log("Anda dapat membuka halaman login ATR/BPN secara manual pada browser Connector.");
   });
 
-  server.listen(PORT, HOST, () => {
-    console.log("Connector aktif: http://" + HOST + ":" + PORT);
-    console.log("1. Selesaikan login ATR/BPN pada jendela browser yang terbuka.");
-    console.log("2. Setelah berhasil login, kembali ke terminal ini lalu tekan ENTER.");
-  });
+  console.log("1. Selesaikan login ATR/BPN pada jendela browser yang terbuka.");
+  console.log("2. Setelah berhasil login, kembali ke terminal ini lalu tekan ENTER.");
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const ask = () => rl.question("\nTekan ENTER untuk memeriksa sesi ATR/BPN (Ctrl+C untuk keluar): ", async () => {
