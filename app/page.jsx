@@ -1,9 +1,4 @@
-import dynamic from "next/dynamic";
-
-const GisWorkspace = dynamic(() => import("../components/GisWorkspace"), {
-  ssr: false,
-  loading: () => <div className="map-loading">Memuat peta GIS…</div>
-});
+import GisWorkspace from "../components/GisWorkspace";
 
 export default function Home() {
   return (
