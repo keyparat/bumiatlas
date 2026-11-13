@@ -7,8 +7,8 @@ const HOST = "127.0.0.1";
 const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
 const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
-const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
-const ALLOWED_LAYERS = new Set([
+const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&version=1.1.1&request=GetCapabilities";
+let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
   "petabpn:PersilBerdasarkanJenisHak",
   "dirptm:detailhgu",
@@ -31,6 +31,8 @@ const previewOrigin = /^https:\/\/bumiatlas-78gy-[a-z0-9-]+\.vercel\.app$/;
 
 let context;
 let ready = false;
+let layerCatalog = [];
+let QUERYABLE_LAYERS = new Set();
 
 function allowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin) || previewOrigin.test(origin || "");
@@ -43,6 +45,96 @@ function send(res, status, body, type = "application/json") {
     "X-Content-Type-Options": "nosniff"
   });
   res.end(body);
+}
+
+function decodeXml(value) {
+  return String(value || "").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+}
+
+function parseLayerCatalog(xml) {
+  const found = new Map();
+  const elements = [];
+  const layers = [];
+  const tokens = String(xml).match(/<[^>]+>|[^<]+/g) || [];
+
+  for (const token of tokens) {
+    if (token.startsWith("<?") || token.startsWith("<!")) continue;
+
+    if (token.startsWith("</")) {
+      const name = token.slice(2, -1).trim().split(/\s/)[0];
+      const current = elements.pop();
+      if (!current || current.name !== name) continue;
+      if (["Name", "Title", "SRS", "CRS"].includes(name) && current.parentName === "Layer" && current.layer) {
+        const value = decodeXml(current.text.trim());
+        if (name === "Name" && value && !current.layer.id) current.layer.id = value;
+        if (name === "Title" && value && !current.layer.title) current.layer.title = value;
+        if ((name === "SRS" || name === "CRS") && value) {
+          current.layer.srs = [...new Set([...current.layer.srs, ...value.split(/\s+/).filter(Boolean)])];
+        }
+      }
+      if (name === "Layer" && current.layer) {
+        const item = current.layer;
+        if (item.id && !item.id.startsWith("style_")) {
+          item.title = item.title || item.id;
+          item.namespace = item.id.includes(":") ? item.id.split(":")[0] : "Lainnya";
+          found.set(item.id, item);
+        }
+      }
+      continue;
+    }
+
+    if (token.startsWith("<")) {
+      const match = token.match(/^<([A-Za-z_][\w:.-]*)([\s\S]*?)\s*(\/?)>$/);
+      if (!match) continue;
+      const [, name, rawAttributes, selfClosing] = match;
+      const parent = elements[elements.length - 1];
+      const parentLayer = parent?.layer || null;
+      const attributes = {};
+      rawAttributes.replace(/([\w:.-]+)\s*=\s*["']([^"']*)["']/g, (_, key, value) => {
+        attributes[key] = decodeXml(value);
+        return "";
+      });
+
+      let layer = parentLayer;
+      if (name === "Layer") {
+        layer = {
+          id: "",
+          title: "",
+          queryable: attributes.queryable === undefined
+            ? Boolean(parentLayer?.queryable)
+            : attributes.queryable === "1" || attributes.queryable.toLowerCase() === "true",
+          srs: [...(parentLayer?.srs || [])],
+          bounds: null
+        };
+      }
+      if ((name === "LatLonBoundingBox" || name === "BoundingBox") && layer) {
+        const box = Object.fromEntries(Object.entries(attributes));
+        if (name === "LatLonBoundingBox") layer.bounds = { ...(layer.bounds || {}), geographic: box };
+        else layer.bounds = { ...(layer.bounds || {}), projected: box };
+      }
+
+      const entry = { name, parentName: parent?.name || "", layer, text: "" };
+      if (!selfClosing) elements.push(entry);
+      else if (name === "Layer" && layer?.id) {
+        layer.title = layer.title || layer.id;
+        layer.namespace = layer.id.includes(":") ? layer.id.split(":")[0] : "Lainnya";
+        found.set(layer.id, layer);
+      }
+      continue;
+    }
+
+    const current = elements[elements.length - 1];
+    if (current && ["Name", "Title", "SRS", "CRS"].includes(current.name)) current.text += token;
+  }
+
+  return [...found.values()].map(item => ({
+    ...item,
+    srs: [...new Set(item.srs)],
+    protocol: "WMS"
+  })).sort((a, b) =>
+    a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
+  );
 }
 
 function toWgs84(bbox) {
@@ -72,7 +164,37 @@ function makeTarget(incoming) {
   params.set("styles", "");
   params.set("format", "image/png");
   params.set("transparent", "true");
-  if (GEOGRAPHIC_LAYERS.has(layer)) {
+  const metadata = layerCatalog.find(item => item.id === layer);
+  const useGeographic = !metadata?.srs?.includes("EPSG:3857") && metadata?.srs?.includes("EPSG:4326");
+  if (useGeographic) {
+    params.set("srs", "EPSG:4326");
+    params.set("bbox", toWgs84(incoming.searchParams.get("bbox")));
+  } else {
+    params.set("srs", "EPSG:3857");
+  }
+  return WMS_PROXY + "?" + WMS_TARGET + "?" + params.toString();
+}
+
+function makeFeatureInfoTarget(incoming) {
+  const layer = incoming.searchParams.get("layers");
+  if (!ALLOWED_LAYERS.has(layer)) throw new Error("Layer tidak diizinkan.");
+  if (!QUERYABLE_LAYERS.has(layer)) throw new Error("Layer ini tidak mendukung GetFeatureInfo (queryable=0).");
+  const params = new URLSearchParams();
+  for (const key of ["width", "height", "bbox", "x", "y", "feature_count"]) {
+    const value = incoming.searchParams.get(key);
+    if (value !== null) params.set(key, value);
+  }
+  params.set("service", "WMS");
+  params.set("request", "GetFeatureInfo");
+  params.set("version", "1.1.1");
+  params.set("layers", layer);
+  params.set("query_layers", layer);
+  params.set("styles", "");
+  params.set("format", "image/png");
+  params.set("info_format", "application/json");
+  const metadata = layerCatalog.find(item => item.id === layer);
+  const useGeographic = !metadata?.srs?.includes("EPSG:3857") && metadata?.srs?.includes("EPSG:4326");
+  if (useGeographic) {
     params.set("srs", "EPSG:4326");
     params.set("bbox", toWgs84(incoming.searchParams.get("bbox")));
   } else {
@@ -93,6 +215,15 @@ async function checkSession() {
     (type.includes("xml") || /WMS_Capabilities|WMT_MS_Capabilities/i.test(body)) &&
     /WMS_Capabilities|WMT_MS_Capabilities/i.test(body);
   ready = Boolean(ok);
+  if (ready) {
+    const parsed = parseLayerCatalog(body);
+    if (parsed.length) {
+      layerCatalog = parsed.map(item => ({ ...item, protocol: "WMS" }));
+      ALLOWED_LAYERS = new Set(parsed.map(item => item.id));
+      QUERYABLE_LAYERS = new Set(parsed.filter(item => item.queryable).map(item => item.id));
+    }
+
+  }
   if (!ready) {
     const preview = body.replace(/\s+/g, " ").slice(0, 240);
     throw new Error("Sesi belum terverifikasi. HTTP " + response.status() + ", " + preview);
@@ -121,11 +252,24 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, JSON.stringify({
       service: "BumiAtlas Local Connector",
       browserRunning: Boolean(context),
-      atrbpnSessionReady: ready
+      atrbpnSessionReady: ready,
+      wmsLayers: layerCatalog.length
     }));
   }
-  if (url.pathname !== "/wms" || req.method !== "GET") {
+  if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers") {
     return send(res, 404, JSON.stringify({ error: "Endpoint tidak ditemukan." }));
+  }
+  if (url.pathname === "/layers") {
+    if (!ready || !context) {
+      return send(res, 503, JSON.stringify({
+        error: "Sesi ATR/BPN belum diverifikasi. Login melalui browser Connector dan tekan Enter di terminal."
+      }));
+    }
+    return send(res, 200, JSON.stringify({ count: layerCatalog.length, protocol: "WMS", layers: layerCatalog }));
+  }
+
+  if (req.method !== "GET") {
+    return send(res, 405, JSON.stringify({ error: "Metode tidak diizinkan." }));
   }
   if (!ready || !context) {
     return send(res, 503, JSON.stringify({
@@ -134,6 +278,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (url.pathname === "/feature-info") {
+      const target = makeFeatureInfoTarget(url);
+      const upstream = await context.request.get(target, {
+        timeout: 30000,
+        headers: { Accept: "application/json,text/plain,*/*", Referer: "https://belajar.atrbpn.go.id/" }
+      });
+      const body = await upstream.text();
+      const contentType = upstream.headers()["content-type"] || "application/json";
+      if (!upstream.ok()) {
+        return send(res, 502, JSON.stringify({ error: "Permintaan GetFeatureInfo gagal.", httpStatus: upstream.status(), detail: body.slice(0, 500) }));
+      }
+      return send(res, 200, body, contentType);
+    }
+
     const target = makeTarget(url);
     const upstream = await context.request.get(target, {
       timeout: 30000,
