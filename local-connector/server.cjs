@@ -4,7 +4,7 @@ const path = require("node:path");
 const { chromium } = require("playwright");
 
 const HOST = "127.0.0.1";
-const PORT = 8765;
+const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
 const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
 const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
@@ -214,7 +214,7 @@ async function main() {
     try {
       const result = await checkSession();
       console.log("BERHASIL: sesi WMS terverifikasi.", result);
-      console.log("BumiAtlas sekarang dapat meminta tile melalui localhost:8765.");
+      console.log("BumiAtlas sekarang dapat meminta tile melalui localhost:8766.");
     } catch (error) {
       console.log("BELUM BERHASIL:", error.message);
       console.log("Pastikan login selesai pada browser Connector, lalu coba ENTER lagi.");
