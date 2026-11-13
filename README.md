@@ -1,44 +1,25 @@
-# ATR/BPN Land Parcel Lookup MCP (Indonesia)
+# BumiAtlas GIS
 
-Connect your AI assistant to [BumiAtlas](https://bumiatlas.com) for Indonesian land parcel research through the Model Context Protocol.
+Next.js GIS workspace for Indonesian land administration workflows.
 
-This listing is a focused entry point for:
+## Development
 
-- Land parcels (bidang tanah) from ATR/BPN's public land map (BHUMI)
-- Certificate number (nomor hak) and NIB lookup, or every parcel at a coordinate
-- Right type (Hak Milik, Hak Guna Bangunan, Hak Guna Usaha, Hak Pakai, Hak Pengelolaan, Wakaf), declared vs mapped area, year, side lengths and boundary
-- Overlaps with other parcels, HGU, concessions and conservation areas
-- BPN village codes and certificate number decoding
+- Node.js 20+
+- `npm install`
+- `npm run dev`
 
-The MCP connection is provided by BumiAtlas. This repository does not run a separate server. For parcels, HGU, mining and zoning in one connection, use [BumiAtlas MCP](https://github.com/BumiAtlas/bumiatlas-mcp).
+## Vercel environment variables
 
-## Connect
+- `ATR_WMS_URL` (optional; defaults to `https://geosrv-app.atrbpn.go.id/geoserver/ows`)
 
-```
-https://bumiatlas.com/mcp/parcels
-```
+The WMS proxy only allows the explicitly configured layer names in `app/api/wms/route.js`. WMS is a rendered map service; it does not provide parcel vector downloads. Verify layer access, service terms, and production behavior before operational use.
 
-Add it as a custom connector in any MCP client and sign in with Google. Tools, examples and data notes: [bumiatlas.com/mcp-docs/parcels](https://bumiatlas.com/mcp-docs/parcels).
+## Current migration scope
 
-## Tools
+- Next.js App Router foundation
+- Leaflet interactive map and drawing toolbar
+- ATR/BPN WMS overlays through a server route
+- GeoJSON import/export
+- Initial dashboard summary cards
 
-| Tool | Description |
-|---|---|
-| `Parcel_search` | Find parcels by certificate number (14 digits, e.g. `22.01.05.03.1.00123`), NIB, village code + NIB as printed on certificates, or `latitude, longitude` with a radius |
-| `Parcel_get` | Full record: right type, declared area vs mapped area and their difference, year, survey method, village, perimeter and sides, RDTR zones, land value zone (ZNT) class, flood hazard; boundary as GeoJSON |
-| `Parcel_overlaps` | Other parcels, HGU, mining/logging concessions and conservation areas overlapping the parcel, with shared area and shares of each |
-| `Parcel_image` | Satellite or street map image of a parcel or point, with every parcel in view outlined and labelled with its NIB, optionally with building footprints (Bali so far) |
-| `Parcel_find_village` | Look up BPN villages (desa/kelurahan) by name or code prefix, or decode a 14-digit certificate number into land office, district and village |
-| `Flood_get` | BNPB InaRISK flood hazard class at a point |
-
-## Example prompts
-
-- *"Look up certificate number 22.01.05.03.1.00123"*
-- *"What parcels are at -6.4601, 107.0093? Show the right type and area"*
-- *"Does the mapped area of this parcel match the area on the certificate?"*
-- *"Is this parcel overlapped by another certificate or an HGU?"*
-- *"Which village is BPN code 22030903?"*
-
-## Data source
-
-ATR/BPN land map (persil layer) and BPN village boundaries.
+BumiAtlas MCP OAuth and parcel lookup are not yet migrated. They should be implemented as server-side routes with an approved OAuth flow rather than exposing MCP credentials or tokens in browser code.
