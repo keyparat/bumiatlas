@@ -32,7 +32,7 @@ export default function GisWorkspace() {
       const data = await response.json();
       if (!Array.isArray(data.layers) || !data.layers.length) throw new Error("Katalog layer kosong");
       setCatalog(data.layers);
-      setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer tersedia · WMS " + (data.wmsCount ?? "—") + " · WFS " + (data.wfsCount ?? "—"));
+      setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer WMS tersedia");
     } catch (error) {
       setCatalogStatus("Katalog belum tersedia · " + error.message);
     }
@@ -155,40 +155,6 @@ export default function GisWorkspace() {
     }
 
     const L = window.L;
-    if (protocol === "WFS") {
-      setStatus("Mengambil fitur vektor WFS: " + layerName);
-      try {
-        const bounds = map.getBounds();
-        const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
-        const params = new URLSearchParams({ typeName: layerName, bbox, count: "500" });
-        const response = await fetch("http://127.0.0.1:8766/wfs?" + params.toString());
-        if (!response.ok) {
-          const detail = await response.json().catch(() => ({}));
-          throw new Error(detail.detail || detail.error || ("HTTP " + response.status));
-        }
-        const data = await response.json();
-        if (!data || !Array.isArray(data.features)) throw new Error("Respons WFS bukan GeoJSON FeatureCollection.");
-        const vector = L.geoJSON(data, {
-          style: { color: "#e07832", weight: 1.5, fillColor: "#f4a261", fillOpacity: 0.12 },
-          pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 5, color: "#b45309", fillOpacity: 0.7 }),
-          onEachFeature: (feature, featureLayer) => featureLayer.on("click", event => {
-            setSelected({
-              lat: event.latlng.lat, lng: event.latlng.lng,
-              layer: layerName, properties: feature.properties || {}, feature
-            });
-            setStatus("Detail fitur WFS: " + layerName);
-          })
-        });
-        vector.addTo(map);
-        layersRef.current[key] = vector;
-        setActive(next);
-        updateMetrics(drawnRef.current, next.length);
-        setStatus("WFS dimuat: " + data.features.length.toLocaleString("id-ID") + " fitur · " + layerName);
-      } catch (error) {
-        setStatus("WFS gagal dimuat: " + error.message);
-      }
-      return;
-    }
 
     const layer = L?.tileLayer.wms ? L.tileLayer.wms("http://127.0.0.1:8766/wms", {
       layers: layerName, format: "image/png", transparent: true, version: "1.1.1",
@@ -266,7 +232,7 @@ export default function GisWorkspace() {
       <div className="panel-title"><div><p className="eyebrow">MAP CONTENTS</p><h2>Layer & alat</h2></div><span className="panel-count">{active.length} aktif</span></div>
       <form className="map-search" onSubmit={findLocation}><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari lokasi / lat, lng" aria-label="Cari lokasi"/><button type="submit">Cari</button></form>
       <div className="layer-group"><p className="group-label">BASEMAP</p><div className="layer-line"><span className="swatch streets"/>OpenStreetMap <span className="enabled">Aktif</span></div></div>
-      <div className="layer-group layer-catalog"><div className="catalog-heading"><p className="group-label">ATR/BPN · WMS + WFS</p><div className="catalog-tools"><span>{catalog.length.toLocaleString("id-ID")}</span><button type="button" className="catalog-refresh" onClick={refreshLayerCatalog}>Muat ulang</button></div></div><input className="layer-filter" value={layerSearch} onChange={e => setLayerSearch(e.target.value)} placeholder="Filter nama layer…" aria-label="Filter layer"/><p className="catalog-status">{catalogStatus}</p><div className="layer-list">{catalog.filter(item => (item.title + " " + item.id + " " + item.namespace).toLowerCase().includes(layerSearch.toLowerCase())).map(item => <label className="layer-line" key={item.protocol + ":" + item.id} title={item.id}><input type="checkbox" checked={active.includes((item.protocol || "WMS") + ":" + item.id)} onChange={() => toggleLayer(item)}/><span className="swatch overlay"/><span className="layer-name"><span>{item.title} <small>{item.protocol || "WMS"}</small></span><small>{item.id}</small></span></label>)}</div><button className="layer-clear" type="button" onClick={clearAllLayers} disabled={!active.length}>Matikan semua layer</button></div>
+      <div className="layer-group layer-catalog"><div className="catalog-heading"><p className="group-label">ATR/BPN · WMS</p><div className="catalog-tools"><span>{catalog.length.toLocaleString("id-ID")}</span><button type="button" className="catalog-refresh" onClick={refreshLayerCatalog}>Muat ulang</button></div></div><input className="layer-filter" value={layerSearch} onChange={e => setLayerSearch(e.target.value)} placeholder="Filter nama layer…" aria-label="Filter layer"/><p className="catalog-status">{catalogStatus}</p><div className="layer-list">{catalog.filter(item => (item.title + " " + item.id + " " + item.namespace).toLowerCase().includes(layerSearch.toLowerCase())).map(item => <label className="layer-line" key={"WMS:" + item.id} title={item.id}><input type="checkbox" checked={active.includes("WMS:" + item.id)} onChange={() => toggleLayer(item)}/><span className="swatch overlay"/><span className="layer-name"><span>{item.title} <small>WMS</small></span><small>{item.id}</small></span></label>)}</div><button className="layer-clear" type="button" onClick={clearAllLayers} disabled={!active.length}>Matikan semua layer</button></div>
       <div className="layer-group"><p className="group-label">DIGITASI & DATA</p><div className="tool-count">{features} bidang digitasi</div><div className="tool-actions"><label className="tool-button">Impor GeoJSON<input type="file" accept=".geojson,.json,application/json" hidden onChange={importGeoJSON}/></label><button className="tool-button" onClick={exportGeoJSON}>Ekspor GeoJSON</button></div><p className="hint">Gunakan toolbar gambar pada peta untuk membuat dan mengedit polygon.</p></div>
       <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN WMS melalui Local Connector Windows · OpenStreetMap</span><small>Jalankan local-connector/start.bat dan pastikan sesi ATR/BPN terverifikasi sebelum mengaktifkan layer.</small></div>
     </aside>
