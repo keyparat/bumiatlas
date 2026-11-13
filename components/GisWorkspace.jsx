@@ -29,8 +29,7 @@ export default function GisWorkspace() {
     let disposed = false;
     (async () => {
       L = (await import("leaflet")).default;
-      await import("leaflet/dist/leaflet.css");
-      await import("leaflet-draw/dist/leaflet.draw.css");
+      window.L = L;
       await import("leaflet-draw");
       if (disposed || mapRef.current) return;
       map = L.map("bumiatlas-map", { zoomControl: false }).setView([-6.4, 106.3], 9);
