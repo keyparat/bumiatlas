@@ -66,7 +66,7 @@ function parseLayerCatalog(xml) {
 
 function parseWfsCatalog(xml) {
   const found = new Map();
-  const blocks = xml.match(/<(?:\w+:)?FeatureType\b[^>]*>[\s\S]*?</(?:\w+:)?FeatureType>/g) || [];
+  const blocks = xml.match(/<(?:\w+:)?FeatureType\b[^>]*>[\s\S]*?<\/(?:\w+:)?FeatureType>/g) || [];
   for (const block of blocks) {
     const name = block.match(/<(?:\w+:)?Name>\s*([^<]+?)\s*<\/(?:\w+:)?Name>/);
     const title = block.match(/<(?:\w+:)?Title>\s*([^<]*?)\s*<\/(?:\w+:)?Title>/);
