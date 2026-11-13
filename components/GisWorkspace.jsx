@@ -49,7 +49,43 @@ export default function GisWorkspace() {
       });
       map.on(L.Draw.Event.EDITED, () => setStatus("Geometri bidang diperbarui."));
       map.on(L.Draw.Event.DELETED, () => { setFeatures(drawn.getLayers().length); updateMetrics(drawn, active.length); });
-      map.on("click", e => setSelected({ lat: e.latlng.lat, lng: e.latlng.lng }));
+      map.on("click", async e => {
+        const point = { lat: e.latlng.lat, lng: e.latlng.lng };
+        const activeLayers = Object.keys(layersRef.current);
+        if (!activeLayers.length) {
+          setSelected(point);
+          return;
+        }
+        setStatus("Mencari detail bidang…");
+        const size = map.getSize();
+        const bounds = map.getBounds();
+        const sw = map.options.crs.project(bounds.getSouthWest());
+        const ne = map.options.crs.project(bounds.getNorthEast());
+        const bbox = [sw.x, sw.y, ne.x, ne.y].join(",");
+        const pixel = map.latLngToContainerPoint(e.latlng);
+        for (const layerName of activeLayers) {
+          try {
+            const params = new URLSearchParams({
+              layers: layerName, bbox, width: String(size.x), height: String(size.y),
+              x: String(Math.round(pixel.x)), y: String(Math.round(pixel.y)),
+              feature_count: "10"
+            });
+            const response = await fetch("http://127.0.0.1:8766/feature-info?" + params.toString());
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const data = await response.json();
+            const found = Array.isArray(data.features) ? data.features : [];
+            if (found.length) {
+              setSelected({ ...point, layer: layerName, properties: found[0].properties || {}, feature: found[0] });
+              setStatus("Detail bidang ditemukan pada " + layerName);
+              return;
+            }
+          } catch (error) {
+            setStatus("Gagal mengambil detail: " + error.message);
+          }
+        }
+        setSelected(point);
+        setStatus("Tidak ada informasi bidang pada titik yang diklik. Coba klik bagian tengah bidang.");
+      });
       window.setTimeout(() => map.invalidateSize(), 150);
     })().catch(err => setStatus("Gagal memuat peta: " + err.message));
     return () => { disposed = true; map?.remove(); mapRef.current = null; };
@@ -157,6 +193,6 @@ export default function GisWorkspace() {
       <div className="layer-group"><p className="group-label">DIGITASI & DATA</p><div className="tool-count">{features} bidang digitasi</div><div className="tool-actions"><label className="tool-button">Impor GeoJSON<input type="file" accept=".geojson,.json,application/json" hidden onChange={importGeoJSON}/></label><button className="tool-button" onClick={exportGeoJSON}>Ekspor GeoJSON</button></div><p className="hint">Gunakan toolbar gambar pada peta untuk membuat dan mengedit polygon.</p></div>
       <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN WMS melalui Local Connector Windows · OpenStreetMap</span><small>Jalankan local-connector/start.bat dan pastikan sesi ATR/BPN terverifikasi sebelum mengaktifkan layer.</small></div>
     </aside>
-    <div className="map-panel"><div id="bumiatlas-map"/><div className="map-status"><span className="live-dot"/>{status}</div>{selected && <div className="coordinate-card"><strong>{selected.label || "Titik terpilih"}</strong><span>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</span><button onClick={() => navigator.clipboard?.writeText(selected.lat + ", " + selected.lng)}>Salin koordinat</button></div>}</div>
+    <div className="map-panel"><div id="bumiatlas-map"/><div className="map-status"><span className="live-dot"/>{status}</div>{selected && <div className="coordinate-card"><strong>{selected.properties?.nib || selected.properties?.NIB || selected.properties?.nomor || selected.label || "Detail titik / bidang"}</strong><span>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</span>{selected.layer && <small>Layer: {selected.layer}</small>}{selected.properties && <dl className="feature-properties">{Object.entries(selected.properties).slice(0, 20).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value == null ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>}<button onClick={() => navigator.clipboard?.writeText(JSON.stringify(selected.properties || {lat:selected.lat,lng:selected.lng}, null, 2))}>Salin detail</button></div>}</div>
   </section>;
 }
