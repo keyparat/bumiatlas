@@ -7,7 +7,7 @@ const HOST = "127.0.0.1";
 const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
 const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
-const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WFS&request=GetCapabilities";
+const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
 let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
   "petabpn:PersilBerdasarkanJenisHak",
