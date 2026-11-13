@@ -7,8 +7,7 @@ const HOST = "127.0.0.1";
 const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
 const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
-const WFS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wfs";
-const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
+const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&version=1.1.1&request=GetCapabilities";
 let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
   "petabpn:PersilBerdasarkanJenisHak",
@@ -33,7 +32,6 @@ const previewOrigin = /^https:\/\/bumiatlas-78gy-[a-z0-9-]+\.vercel\.app$/;
 let context;
 let ready = false;
 let layerCatalog = [];
-let wfsCatalog = [];
 
 function allowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin) || previewOrigin.test(origin || "");
@@ -62,44 +60,6 @@ function parseLayerCatalog(xml) {
   return [...found.values()].sort((a, b) =>
     a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
   );
-}
-
-function parseWfsCatalog(xml) {
-  const found = new Map();
-  const blocks = xml.match(/<(?:\w+:)?FeatureType\b[^>]*>[\s\S]*?<\/(?:\w+:)?FeatureType>/g) || [];
-  for (const block of blocks) {
-    const name = block.match(/<(?:\w+:)?Name>\s*([^<]+?)\s*<\/(?:\w+:)?Name>/);
-    const title = block.match(/<(?:\w+:)?Title>\s*([^<]*?)\s*<\/(?:\w+:)?Title>/);
-    if (!name) continue;
-    const id = name[1].trim();
-    const namespace = id.includes(":") ? id.split(":")[0] : "Lainnya";
-    found.set(id, { id, title: (title?.[1] || id).trim(), namespace, protocol: "WFS" });
-  }
-  return [...found.values()].sort((a, b) =>
-    a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
-  );
-}
-
-function makeWfsTarget(incoming) {
-  const typeName = incoming.searchParams.get("typeName");
-  if (!typeName || !wfsCatalog.some(item => item.id === typeName)) {
-    throw new Error("Layer WFS tidak ditemukan dalam katalog.");
-  }
-  const params = new URLSearchParams();
-  params.set("service", "WFS");
-  params.set("version", "2.0.0");
-  params.set("request", "GetFeature");
-  params.set("typeNames", typeName);
-  params.set("outputFormat", "application/json");
-  params.set("srsName", "urn:ogc:def:crs:EPSG::4326");
-  params.set("count", String(Math.min(1000, Math.max(1, Number(incoming.searchParams.get("count")) || 500))));
-  const bbox = incoming.searchParams.get("bbox");
-  if (bbox) {
-    const values = bbox.split(",").map(Number);
-    if (values.length !== 4 || values.some(v => !Number.isFinite(v))) throw new Error("BBOX WFS tidak valid.");
-    params.set("bbox", values.join(",") + ",urn:ogc:def:crs:EPSG::4326");
-  }
-  return WMS_PROXY + "?" + WFS_TARGET + "?" + params.toString();
 }
 
 function toWgs84(bbox) {
@@ -181,22 +141,7 @@ async function checkSession() {
       layerCatalog = parsed.map(item => ({ ...item, protocol: "WMS" }));
       ALLOWED_LAYERS = new Set(parsed.map(item => item.id));
     }
-    try {
-      const wfsUrl = WMS_PROXY + "?" + WFS_TARGET + "?service=WFS&version=2.0.0&request=GetCapabilities";
-      const wfsResponse = await context.request.get(wfsUrl, {
-        timeout: 60000,
-        headers: { Accept: "application/xml,text/xml,*/*", Referer: "https://belajar.atrbpn.go.id/" }
-      });
-      const wfsBody = await wfsResponse.text();
-      if (wfsResponse.ok() && /WFS_Capabilities/i.test(wfsBody)) {
-        wfsCatalog = parseWfsCatalog(wfsBody);
-        console.log("Katalog WFS berhasil dimuat:", wfsCatalog.length, "layer.");
-      } else {
-        console.log("Katalog WFS belum terbaca. HTTP", wfsResponse.status(), wfsBody.replace(/\\s+/g, " ").slice(0, 300));
-      }
-    } catch (error) {
-      console.log("Gagal memuat katalog WFS:", error.message);
-    }
+
   }
   if (!ready) {
     const preview = body.replace(/\s+/g, " ").slice(0, 240);
@@ -227,11 +172,10 @@ const server = http.createServer(async (req, res) => {
       service: "BumiAtlas Local Connector",
       browserRunning: Boolean(context),
       atrbpnSessionReady: ready,
-      wmsLayers: layerCatalog.length,
-      wfsLayers: wfsCatalog.length
+      wmsLayers: layerCatalog.length
     }));
   }
-  if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers" && url.pathname !== "/wfs") {
+  if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers") {
     return send(res, 404, JSON.stringify({ error: "Endpoint tidak ditemukan." }));
   }
   if (url.pathname === "/layers") {
@@ -240,7 +184,7 @@ const server = http.createServer(async (req, res) => {
         error: "Sesi ATR/BPN belum diverifikasi. Login melalui browser Connector dan tekan Enter di terminal."
       }));
     }
-    return send(res, 200, JSON.stringify({ count: layerCatalog.length + wfsCatalog.length, wmsCount: layerCatalog.length, wfsCount: wfsCatalog.length, layers: [...layerCatalog, ...wfsCatalog] }));
+    return send(res, 200, JSON.stringify({ count: layerCatalog.length, protocol: "WMS", layers: layerCatalog }));
   }
 
   if (req.method !== "GET") {
@@ -253,25 +197,6 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    if (url.pathname === "/wfs") {
-      const target = makeWfsTarget(url);
-      const upstream = await context.request.get(target, {
-        timeout: 60000,
-        headers: { Accept: "application/json", Referer: "https://belajar.atrbpn.go.id/" }
-      });
-      const body = await upstream.text();
-      const contentType = upstream.headers()["content-type"] || "application/json";
-      if (!upstream.ok() || (!/json|geo\\+json/i.test(contentType) && !/^\s*[\\[{]/.test(body))) {
-        return send(res, 502, JSON.stringify({
-          error: "Permintaan WFS GetFeature gagal atau bukan GeoJSON.",
-          httpStatus: upstream.status(),
-          contentType,
-          detail: body.slice(0, 700)
-        }));
-      }
-      return send(res, 200, body, "application/geo+json; charset=utf-8");
-    }
-
     if (url.pathname === "/feature-info") {
       const target = makeFeatureInfoTarget(url);
       const upstream = await context.request.get(target, {
