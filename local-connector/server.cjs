@@ -81,6 +81,31 @@ function makeTarget(incoming) {
   return WMS_PROXY + "?" + WMS_TARGET + "?" + params.toString();
 }
 
+function makeFeatureInfoTarget(incoming) {
+  const layer = incoming.searchParams.get("layers");
+  if (!ALLOWED_LAYERS.has(layer)) throw new Error("Layer tidak diizinkan.");
+  const params = new URLSearchParams();
+  for (const key of ["width", "height", "bbox", "x", "y", "feature_count"]) {
+    const value = incoming.searchParams.get(key);
+    if (value !== null) params.set(key, value);
+  }
+  params.set("service", "WMS");
+  params.set("request", "GetFeatureInfo");
+  params.set("version", "1.1.1");
+  params.set("layers", layer);
+  params.set("query_layers", layer);
+  params.set("styles", "");
+  params.set("format", "image/png");
+  params.set("info_format", "application/json");
+  if (GEOGRAPHIC_LAYERS.has(layer)) {
+    params.set("srs", "EPSG:4326");
+    params.set("bbox", toWgs84(incoming.searchParams.get("bbox")));
+  } else {
+    params.set("srs", "EPSG:3857");
+  }
+  return WMS_PROXY + "?" + WMS_TARGET + "?" + params.toString();
+}
+
 async function checkSession() {
   if (!context) throw new Error("Browser ATR/BPN belum berjalan.");
   const response = await context.request.get(LOGIN_URL, {
@@ -124,8 +149,11 @@ const server = http.createServer(async (req, res) => {
       atrbpnSessionReady: ready
     }));
   }
-  if (url.pathname !== "/wms" || req.method !== "GET") {
+  if (url.pathname !== "/wms" && url.pathname !== "/feature-info") {
     return send(res, 404, JSON.stringify({ error: "Endpoint tidak ditemukan." }));
+  }
+  if (req.method !== "GET") {
+    return send(res, 405, JSON.stringify({ error: "Metode tidak diizinkan." }));
   }
   if (!ready || !context) {
     return send(res, 503, JSON.stringify({
@@ -134,6 +162,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (url.pathname === "/feature-info") {
+      const target = makeFeatureInfoTarget(url);
+      const upstream = await context.request.get(target, {
+        timeout: 30000,
+        headers: { Accept: "application/json,text/plain,*/*", Referer: "https://belajar.atrbpn.go.id/" }
+      });
+      const body = await upstream.text();
+      const contentType = upstream.headers()["content-type"] || "application/json";
+      if (!upstream.ok()) {
+        return send(res, 502, JSON.stringify({ error: "Permintaan GetFeatureInfo gagal.", httpStatus: upstream.status(), detail: body.slice(0, 500) }));
+      }
+      return send(res, 200, body, contentType);
+    }
+
     const target = makeTarget(url);
     const upstream = await context.request.get(target, {
       timeout: 30000,
