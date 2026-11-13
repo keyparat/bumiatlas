@@ -6,7 +6,8 @@ const { chromium } = require("playwright");
 const HOST = "127.0.0.1";
 const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
-const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";\nconst WFS_TARGET = "https://geosrv-app.atrbpn.go.id/geoserver/wfs";
+const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
+const WFS_TARGET = "https://geosrv-app.atrbpn.go.id/geoserver/wfs";
 const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
 let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
@@ -31,7 +32,8 @@ const previewOrigin = /^https:\/\/bumiatlas-78gy-[a-z0-9-]+\.vercel\.app$/;
 
 let context;
 let ready = false;
-let layerCatalog = [];\nlet wfsCatalog = [];
+let layerCatalog = [];
+let wfsCatalog = [];
 
 function allowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin) || previewOrigin.test(origin || "");
