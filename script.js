@@ -2,6 +2,7 @@ import { connectBumiAtlas, initializeBumiAtlas, disconnectBumiAtlas, callBumiAtl
 
 const INDONESIA_CENTER = [-2.5489, 118.0149];
 const map = L.map("map", { zoomControl: false, scrollWheelZoom: true }).setView(INDONESIA_CENTER, 5);
+window.BumiAtlasMap = map;
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'

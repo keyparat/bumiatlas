@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.keyparat/bumiatlas-geoserver",
+  "title": "BumiAtlas GeoServer ATR/BPN",
+  "description": "Read-only MCP gateway to ATR/BPN GeoServer WFS/WMS with direct and BHUMI proxy connectors.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/keyparat/bumiatlas",
+    "source": "github"
+  },
+  "websiteUrl": "https://bumiatlas.com",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://bumiatlas.com/mcp/geoserver"
+    }
+  ]
+}

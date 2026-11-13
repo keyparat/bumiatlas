@@ -1,5 +1,12 @@
 {
   "rewrites": [
-    { "source": "/mcp/callback", "destination": "/index.html" }
+    {
+      "source": "/mcp/callback",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/mcp/geoserver",
+      "destination": "/api/mcp/geoserver"
+    }
   ]
 }
