@@ -6,7 +6,6 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "lint": "next lint"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.0",
