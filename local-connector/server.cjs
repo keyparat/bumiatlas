@@ -7,7 +7,7 @@ const HOST = "127.0.0.1";
 const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
 const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
-const WFS_TARGET = "https://geosrv-app.atrbpn.go.id/geoserver/wfs";
+const WFS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wfs";
 const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
 let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
@@ -190,8 +190,9 @@ async function checkSession() {
       const wfsBody = await wfsResponse.text();
       if (wfsResponse.ok() && /WFS_Capabilities/i.test(wfsBody)) {
         wfsCatalog = parseWfsCatalog(wfsBody);
+        console.log("Katalog WFS berhasil dimuat:", wfsCatalog.length, "layer.");
       } else {
-        console.log("Katalog WFS belum terbaca. HTTP", wfsResponse.status());
+        console.log("Katalog WFS belum terbaca. HTTP", wfsResponse.status(), wfsBody.replace(/\\s+/g, " ").slice(0, 300));
       }
     } catch (error) {
       console.log("Gagal memuat katalog WFS:", error.message);
@@ -225,7 +226,9 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, JSON.stringify({
       service: "BumiAtlas Local Connector",
       browserRunning: Boolean(context),
-      atrbpnSessionReady: ready
+      atrbpnSessionReady: ready,
+      wmsLayers: layerCatalog.length,
+      wfsLayers: wfsCatalog.length
     }));
   }
   if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers" && url.pathname !== "/wfs") {
