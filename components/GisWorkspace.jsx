@@ -58,7 +58,18 @@ export default function GisWorkspace() {
   function updateMetrics(group, layerCount) {
     const count = group?.getLayers().length || 0;
     const area = group ? group.getLayers().reduce((sum, layer) => {
-      try { return sum + window.L?.GeometryUtil?.geodesicArea?.(layer.getLatLngs()[0]) / 1e6 || sum; } catch { return sum; }
+      try {
+        const ring = layer.getLatLngs()[0];
+        if (!ring || ring.length < 3) return sum;
+        const radius = 6371008.8;
+        let total = 0;
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i], b = ring[(i + 1) % ring.length];
+          total += (b.lng - a.lng) * Math.PI / 180 *
+            (2 + Math.sin(a.lat * Math.PI / 180) + Math.sin(b.lat * Math.PI / 180));
+        }
+        return sum + Math.abs(total * radius * radius / 2) / 1e6;
+      } catch { return sum; }
     }, 0) : 0;
     document.getElementById("metric-parcels").textContent = count.toLocaleString("id-ID");
     document.getElementById("metric-area").textContent = area ? area.toFixed(2) + " km²" : "—";
