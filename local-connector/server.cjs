@@ -138,8 +138,23 @@ async function checkSession() {
   if (ready) {
     const parsed = parseLayerCatalog(body);
     if (parsed.length) {
-      layerCatalog = parsed;
+      layerCatalog = parsed.map(item => ({ ...item, protocol: "WMS" }));
       ALLOWED_LAYERS = new Set(parsed.map(item => item.id));
+    }
+    try {
+      const wfsUrl = WMS_PROXY + "?" + WFS_TARGET + "?service=WFS&version=2.0.0&request=GetCapabilities";
+      const wfsResponse = await context.request.get(wfsUrl, {
+        timeout: 60000,
+        headers: { Accept: "application/xml,text/xml,*/*", Referer: "https://belajar.atrbpn.go.id/" }
+      });
+      const wfsBody = await wfsResponse.text();
+      if (wfsResponse.ok() && /WFS_Capabilities/i.test(wfsBody)) {
+        wfsCatalog = parseWfsCatalog(wfsBody);
+      } else {
+        console.log("Katalog WFS belum terbaca. HTTP", wfsResponse.status());
+      }
+    } catch (error) {
+      console.log("Gagal memuat katalog WFS:", error.message);
     }
   }
   if (!ready) {
@@ -173,7 +188,7 @@ const server = http.createServer(async (req, res) => {
       atrbpnSessionReady: ready
     }));
   }
-  if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers") {
+  if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers" && url.pathname !== "/wfs") {
     return send(res, 404, JSON.stringify({ error: "Endpoint tidak ditemukan." }));
   }
   if (url.pathname === "/layers") {
@@ -182,7 +197,7 @@ const server = http.createServer(async (req, res) => {
         error: "Sesi ATR/BPN belum diverifikasi. Login melalui browser Connector dan tekan Enter di terminal."
       }));
     }
-    return send(res, 200, JSON.stringify({ count: layerCatalog.length, layers: layerCatalog }));
+    return send(res, 200, JSON.stringify({ count: layerCatalog.length + wfsCatalog.length, wmsCount: layerCatalog.length, wfsCount: wfsCatalog.length, layers: [...layerCatalog, ...wfsCatalog] }));
   }
 
   if (req.method !== "GET") {
@@ -195,6 +210,25 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (url.pathname === "/wfs") {
+      const target = makeWfsTarget(url);
+      const upstream = await context.request.get(target, {
+        timeout: 60000,
+        headers: { Accept: "application/json", Referer: "https://belajar.atrbpn.go.id/" }
+      });
+      const body = await upstream.text();
+      const contentType = upstream.headers()["content-type"] || "application/json";
+      if (!upstream.ok() || (!/json|geo\\+json/i.test(contentType) && !/^\\s*[\\[{]/.test(body))) {
+        return send(res, 502, JSON.stringify({
+          error: "Permintaan WFS GetFeature gagal atau bukan GeoJSON.",
+          httpStatus: upstream.status(),
+          contentType,
+          detail: body.slice(0, 700)
+        }));
+      }
+      return send(res, 200, body, "application/geo+json; charset=utf-8");
+    }
+
     if (url.pathname === "/feature-info") {
       const target = makeFeatureInfoTarget(url);
       const upstream = await context.request.get(target, {
