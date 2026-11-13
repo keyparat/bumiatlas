@@ -8,7 +8,7 @@ const PORT = 8766;
 const WMS_PROXY = "https://belajar.atrbpn.go.id/Layanan/peta/DataSpasial/WMSProxy";
 const WMS_TARGET = "http://geosrv-app.atrbpn.go.id/geoserver/wms";
 const LOGIN_URL = WMS_PROXY + "?" + WMS_TARGET + "?service=WMS&request=GetCapabilities";
-const ALLOWED_LAYERS = new Set([
+let ALLOWED_LAYERS = new Set([
   "bhumi:Persil",
   "petabpn:PersilBerdasarkanJenisHak",
   "dirptm:detailhgu",
@@ -31,6 +31,7 @@ const previewOrigin = /^https:\/\/bumiatlas-78gy-[a-z0-9-]+\.vercel\.app$/;
 
 let context;
 let ready = false;
+let layerCatalog = [];
 
 function allowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin) || previewOrigin.test(origin || "");
@@ -43,6 +44,22 @@ function send(res, status, body, type = "application/json") {
     "X-Content-Type-Options": "nosniff"
   });
   res.end(body);
+}
+
+function parseLayerCatalog(xml) {
+  const found = new Map();
+  const pattern = /<Name>\\s*([^<]+?)\\s*<\\/Name>\\s*<Title>\\s*([^<]*?)\\s*<\\/Title>/g;
+  let match;
+  while ((match = pattern.exec(xml)) !== null) {
+    const id = match[1].trim();
+    const title = match[2].trim() || id;
+    if (!id || id.startsWith("style_")) continue;
+    const namespace = id.includes(":") ? id.split(":")[0] : "Lainnya";
+    found.set(id, { id, title, namespace });
+  }
+  return [...found.values()].sort((a, b) =>
+    a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
+  );
 }
 
 function toWgs84(bbox) {
@@ -118,6 +135,13 @@ async function checkSession() {
     (type.includes("xml") || /WMS_Capabilities|WMT_MS_Capabilities/i.test(body)) &&
     /WMS_Capabilities|WMT_MS_Capabilities/i.test(body);
   ready = Boolean(ok);
+  if (ready) {
+    const parsed = parseLayerCatalog(body);
+    if (parsed.length) {
+      layerCatalog = parsed;
+      ALLOWED_LAYERS = new Set(parsed.map(item => item.id));
+    }
+  }
   if (!ready) {
     const preview = body.replace(/\s+/g, " ").slice(0, 240);
     throw new Error("Sesi belum terverifikasi. HTTP " + response.status() + ", " + preview);
@@ -149,9 +173,18 @@ const server = http.createServer(async (req, res) => {
       atrbpnSessionReady: ready
     }));
   }
-  if (url.pathname !== "/wms" && url.pathname !== "/feature-info") {
+  if (url.pathname !== "/wms" && url.pathname !== "/feature-info" && url.pathname !== "/layers") {
     return send(res, 404, JSON.stringify({ error: "Endpoint tidak ditemukan." }));
   }
+  if (url.pathname === "/layers") {
+    if (!ready || !context) {
+      return send(res, 503, JSON.stringify({
+        error: "Sesi ATR/BPN belum diverifikasi. Login melalui browser Connector dan tekan Enter di terminal."
+      }));
+    }
+    return send(res, 200, JSON.stringify({ count: layerCatalog.length, layers: layerCatalog }));
+  }
+
   if (req.method !== "GET") {
     return send(res, 405, JSON.stringify({ error: "Metode tidak diizinkan." }));
   }
