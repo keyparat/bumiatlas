@@ -48,7 +48,7 @@ function send(res, status, body, type = "application/json") {
 
 function parseLayerCatalog(xml) {
   const found = new Map();
-  const pattern = /<Name>\\s*([^<]+?)\\s*<\\/Name>\\s*<Title>\\s*([^<]*?)\\s*<\\/Title>/g;
+  const pattern = /<Name>\s*([^<]+?)\s*<\/Name>\s*<Title>\s*([^<]*?)\s*<\/Title>/g;
   let match;
   while ((match = pattern.exec(xml)) !== null) {
     const id = match[1].trim();
