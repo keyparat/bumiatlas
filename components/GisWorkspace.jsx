@@ -24,6 +24,20 @@ export default function GisWorkspace() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
 
+  async function refreshLayerCatalog() {
+    setCatalogStatus("Memuat daftar layer…");
+    try {
+      const response = await fetch("http://127.0.0.1:8766/layers");
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const data = await response.json();
+      if (!Array.isArray(data.layers) || !data.layers.length) throw new Error("Katalog layer kosong");
+      setCatalog(data.layers);
+      setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer tersedia");
+    } catch (error) {
+      setCatalogStatus("Katalog belum tersedia · " + error.message);
+    }
+  }
+
   useEffect(() => {
     let map;
     let base;
@@ -37,17 +51,7 @@ export default function GisWorkspace() {
       if (disposed || mapRef.current) return;
       map = L.map("bumiatlas-map", { zoomControl: false }).setView([-6.4, 106.3], 9);
       mapRef.current = map;
-      fetch("http://127.0.0.1:8766/layers")
-        .then(response => { if (!response.ok) throw new Error("HTTP " + response.status); return response.json(); })
-        .then(data => {
-          if (Array.isArray(data.layers) && data.layers.length) {
-            setCatalog(data.layers);
-            setCatalogStatus(data.layers.length.toLocaleString("id-ID") + " layer tersedia");
-          } else {
-            setCatalogStatus("Daftar layer kosong");
-          }
-        })
-        .catch(() => setCatalogStatus("Belum terhubung ke katalog Connector"));
+      refreshLayerCatalog();
       base = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 20, attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
@@ -220,7 +224,7 @@ export default function GisWorkspace() {
       <div className="panel-title"><div><p className="eyebrow">MAP CONTENTS</p><h2>Layer & alat</h2></div><span className="panel-count">{active.length} aktif</span></div>
       <form className="map-search" onSubmit={findLocation}><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari lokasi / lat, lng" aria-label="Cari lokasi"/><button type="submit">Cari</button></form>
       <div className="layer-group"><p className="group-label">BASEMAP</p><div className="layer-line"><span className="swatch streets"/>OpenStreetMap <span className="enabled">Aktif</span></div></div>
-      <div className="layer-group layer-catalog"><div className="catalog-heading"><p className="group-label">ATR/BPN · WMS</p><span>{catalog.length.toLocaleString("id-ID")}</span></div><input className="layer-filter" value={layerSearch} onChange={e => setLayerSearch(e.target.value)} placeholder="Filter nama layer…" aria-label="Filter layer"/><p className="catalog-status">{catalogStatus}</p><div className="layer-list">{catalog.filter(item => (item.title + " " + item.id + " " + item.namespace).toLowerCase().includes(layerSearch.toLowerCase())).map(item => <label className="layer-line" key={item.id} title={item.id}><input type="checkbox" checked={active.includes(item.id)} onChange={() => toggleLayer(item.id)}/><span className="swatch overlay"/><span className="layer-name"><span>{item.title}</span><small>{item.id}</small></span></label>)}</div><button className="layer-clear" type="button" onClick={clearAllLayers} disabled={!active.length}>Matikan semua layer</button></div>
+      <div className="layer-group layer-catalog"><div className="catalog-heading"><p className="group-label">ATR/BPN · WMS</p><div className="catalog-tools"><span>{catalog.length.toLocaleString("id-ID")}</span><button type="button" className="catalog-refresh" onClick={refreshLayerCatalog}>Muat ulang</button></div></div><input className="layer-filter" value={layerSearch} onChange={e => setLayerSearch(e.target.value)} placeholder="Filter nama layer…" aria-label="Filter layer"/><p className="catalog-status">{catalogStatus}</p><div className="layer-list">{catalog.filter(item => (item.title + " " + item.id + " " + item.namespace).toLowerCase().includes(layerSearch.toLowerCase())).map(item => <label className="layer-line" key={item.id} title={item.id}><input type="checkbox" checked={active.includes(item.id)} onChange={() => toggleLayer(item.id)}/><span className="swatch overlay"/><span className="layer-name"><span>{item.title}</span><small>{item.id}</small></span></label>)}</div><button className="layer-clear" type="button" onClick={clearAllLayers} disabled={!active.length}>Matikan semua layer</button></div>
       <div className="layer-group"><p className="group-label">DIGITASI & DATA</p><div className="tool-count">{features} bidang digitasi</div><div className="tool-actions"><label className="tool-button">Impor GeoJSON<input type="file" accept=".geojson,.json,application/json" hidden onChange={importGeoJSON}/></label><button className="tool-button" onClick={exportGeoJSON}>Ekspor GeoJSON</button></div><p className="hint">Gunakan toolbar gambar pada peta untuk membuat dan mengedit polygon.</p></div>
       <div className="source-note"><strong>Sumber peta</strong><span>ATR/BPN WMS melalui Local Connector Windows · OpenStreetMap</span><small>Jalankan local-connector/start.bat dan pastikan sesi ATR/BPN terverifikasi sebelum mengaktifkan layer.</small></div>
     </aside>
