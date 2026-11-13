@@ -18,7 +18,7 @@ The hosted Vercel server cannot complete the ATR/BPN WMSProxy authentication red
 4. Return to the connector terminal and press Enter to verify WMS GetCapabilities.
 5. Keep the connector running and open BumiAtlas. Enable an ATR/BPN layer.
 
-The connector binds only to `127.0.0.1:8765`, keeps its dedicated browser profile locally, and does not send passwords or cookies to Vercel or GitHub. See [local-connector/README.md](local-connector/README.md) for setup and troubleshooting.
+The connector binds only to `127.0.0.1:8766`, keeps its dedicated browser profile locally, and does not send passwords or cookies to Vercel or GitHub. See [local-connector/README.md](local-connector/README.md) for setup and troubleshooting.
 
 ## Current scope
 
