@@ -12,7 +12,9 @@
     "@modelcontextprotocol/client": "2.3.0",
     "@vercel/blob": "^2.0.0",
     "shp-write": "^0.3.2",
-    "jspdf": "^3.0.1"
+    "jspdf": "^3.0.1",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "vite": "^7.0.0"

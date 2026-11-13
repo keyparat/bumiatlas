@@ -68,3 +68,15 @@ a { color:inherit; text-decoration:none; }
 .export-tools label { display:grid; gap:5px; color:#68756c; font-size:9px; font-weight:700; }
 .export-tools select { width:100%; padding:9px 8px; border:1px solid #dfe6df; border-radius:6px; background:#fff; color:#34463a; font-size:10px; }
 .export-tools .editor-hint { margin:0; }
+
+
+.geoserver-block .gs-label{display:flex;flex-direction:column;gap:6px;margin:10px 0;font-size:12px;font-weight:600;color:#526071}
+.geoserver-block .gs-label input,.geoserver-block .gs-label select{width:100%;min-height:38px;padding:8px 10px;border:1px solid #d9e0e7;border-radius:8px;background:#fff;color:#17212b;font:inherit}
+.geoserver-block .gs-check{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:13px;color:#334155}
+.geoserver-block .gs-actions{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}
+.geoserver-block .gs-actions .editor-button{flex:1 1 auto;min-height:35px;font-size:12px}
+.gs-details{margin-top:10px;padding:10px;border:1px solid #e3e8ee;border-radius:9px;background:#fff;font-size:12px}
+.gs-details>strong{display:block;margin-bottom:8px}
+.gs-detail-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #edf0f3}
+.gs-detail-row span{color:#64748b;overflow-wrap:anywhere}
+.gs-detail-row b{text-align:right;overflow-wrap:anywhere;color:#1e293b}

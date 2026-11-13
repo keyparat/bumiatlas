@@ -42,3 +42,13 @@ Add it as a custom connector in any MCP client and sign in with Google. Tools, e
 ## Data source
 
 ATR/BPN land map (persil layer) and BPN village boundaries.
+
+## GeoServer MCP (ATR/BPN)
+
+BumiAtlas also provides a read-only GeoServer MCP gateway for the ATR/BPN `umum:Persil` WFS layer. It supports direct GeoServer access and a configurable BHUMI `/api/proksi` adapter.
+
+- MCP endpoint: `https://bumiatlas.com/mcp/geoserver`
+- REST health: `https://bumiatlas.com/api/geoserver?action=health`
+- Setup, environment variables, proxy authentication, and tools: [GEOSERVER_MCP.md](./GEOSERVER_MCP.md)
+
+The direct ATR/BPN GeoServer may require an internal VPN. The BHUMI proxy requires valid authorized authentication; the adapter does not bypass HTTP 401/403 responses.
