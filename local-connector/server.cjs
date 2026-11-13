@@ -32,6 +32,7 @@ const previewOrigin = /^https:\/\/bumiatlas-78gy-[a-z0-9-]+\.vercel\.app$/;
 let context;
 let ready = false;
 let layerCatalog = [];
+let QUERYABLE_LAYERS = new Set();
 
 function allowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin) || previewOrigin.test(origin || "");
@@ -46,18 +47,92 @@ function send(res, status, body, type = "application/json") {
   res.end(body);
 }
 
+function decodeXml(value) {
+  return String(value || "").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+}
+
 function parseLayerCatalog(xml) {
   const found = new Map();
-  const pattern = /<Name>\s*([^<]+?)\s*<\/Name>\s*<Title>\s*([^<]*?)\s*<\/Title>/g;
-  let match;
-  while ((match = pattern.exec(xml)) !== null) {
-    const id = match[1].trim();
-    const title = match[2].trim() || id;
-    if (!id || id.startsWith("style_")) continue;
-    const namespace = id.includes(":") ? id.split(":")[0] : "Lainnya";
-    found.set(id, { id, title, namespace });
+  const elements = [];
+  const layers = [];
+  const tokens = String(xml).match(/<[^>]+>|[^<]+/g) || [];
+
+  for (const token of tokens) {
+    if (token.startsWith("<?") || token.startsWith("<!")) continue;
+
+    if (token.startsWith("</")) {
+      const name = token.slice(2, -1).trim().split(/\s/)[0];
+      const current = elements.pop();
+      if (!current || current.name !== name) continue;
+      if (["Name", "Title", "SRS", "CRS"].includes(name) && current.parentName === "Layer" && current.layer) {
+        const value = decodeXml(current.text.trim());
+        if (name === "Name" && value && !current.layer.id) current.layer.id = value;
+        if (name === "Title" && value && !current.layer.title) current.layer.title = value;
+        if ((name === "SRS" || name === "CRS") && value) {
+          current.layer.srs = [...new Set([...current.layer.srs, ...value.split(/\s+/).filter(Boolean)])];
+        }
+      }
+      if (name === "Layer" && current.layer) {
+        const item = current.layer;
+        if (item.id && !item.id.startsWith("style_")) {
+          item.title = item.title || item.id;
+          item.namespace = item.id.includes(":") ? item.id.split(":")[0] : "Lainnya";
+          found.set(item.id, item);
+        }
+      }
+      continue;
+    }
+
+    if (token.startsWith("<")) {
+      const match = token.match(/^<([A-Za-z_][\w:.-]*)([\s\S]*?)\s*(\/?)>$/);
+      if (!match) continue;
+      const [, name, rawAttributes, selfClosing] = match;
+      const parent = elements[elements.length - 1];
+      const parentLayer = parent?.layer || null;
+      const attributes = {};
+      rawAttributes.replace(/([\w:.-]+)\s*=\s*["']([^"']*)["']/g, (_, key, value) => {
+        attributes[key] = decodeXml(value);
+        return "";
+      });
+
+      let layer = parentLayer;
+      if (name === "Layer") {
+        layer = {
+          id: "",
+          title: "",
+          queryable: attributes.queryable === undefined
+            ? Boolean(parentLayer?.queryable)
+            : attributes.queryable === "1" || attributes.queryable.toLowerCase() === "true",
+          srs: [...(parentLayer?.srs || [])],
+          bounds: null
+        };
+      }
+      if ((name === "LatLonBoundingBox" || name === "BoundingBox") && layer) {
+        const box = Object.fromEntries(Object.entries(attributes));
+        if (name === "LatLonBoundingBox") layer.bounds = { ...(layer.bounds || {}), geographic: box };
+        else layer.bounds = { ...(layer.bounds || {}), projected: box };
+      }
+
+      const entry = { name, parentName: parent?.name || "", layer, text: "" };
+      if (!selfClosing) elements.push(entry);
+      else if (name === "Layer" && layer?.id) {
+        layer.title = layer.title || layer.id;
+        layer.namespace = layer.id.includes(":") ? layer.id.split(":")[0] : "Lainnya";
+        found.set(layer.id, layer);
+      }
+      continue;
+    }
+
+    const current = elements[elements.length - 1];
+    if (current && ["Name", "Title", "SRS", "CRS"].includes(current.name)) current.text += token;
   }
-  return [...found.values()].sort((a, b) =>
+
+  return [...found.values()].map(item => ({
+    ...item,
+    srs: [...new Set(item.srs)],
+    protocol: "WMS"
+  })).sort((a, b) =>
     a.namespace.localeCompare(b.namespace, "id") || a.title.localeCompare(b.title, "id")
   );
 }
@@ -89,7 +164,9 @@ function makeTarget(incoming) {
   params.set("styles", "");
   params.set("format", "image/png");
   params.set("transparent", "true");
-  if (GEOGRAPHIC_LAYERS.has(layer)) {
+  const metadata = layerCatalog.find(item => item.id === layer);
+  const useGeographic = !metadata?.srs?.includes("EPSG:3857") && metadata?.srs?.includes("EPSG:4326");
+  if (useGeographic) {
     params.set("srs", "EPSG:4326");
     params.set("bbox", toWgs84(incoming.searchParams.get("bbox")));
   } else {
@@ -101,6 +178,7 @@ function makeTarget(incoming) {
 function makeFeatureInfoTarget(incoming) {
   const layer = incoming.searchParams.get("layers");
   if (!ALLOWED_LAYERS.has(layer)) throw new Error("Layer tidak diizinkan.");
+  if (!QUERYABLE_LAYERS.has(layer)) throw new Error("Layer ini tidak mendukung GetFeatureInfo (queryable=0).");
   const params = new URLSearchParams();
   for (const key of ["width", "height", "bbox", "x", "y", "feature_count"]) {
     const value = incoming.searchParams.get(key);
@@ -114,7 +192,9 @@ function makeFeatureInfoTarget(incoming) {
   params.set("styles", "");
   params.set("format", "image/png");
   params.set("info_format", "application/json");
-  if (GEOGRAPHIC_LAYERS.has(layer)) {
+  const metadata = layerCatalog.find(item => item.id === layer);
+  const useGeographic = !metadata?.srs?.includes("EPSG:3857") && metadata?.srs?.includes("EPSG:4326");
+  if (useGeographic) {
     params.set("srs", "EPSG:4326");
     params.set("bbox", toWgs84(incoming.searchParams.get("bbox")));
   } else {
@@ -140,6 +220,7 @@ async function checkSession() {
     if (parsed.length) {
       layerCatalog = parsed.map(item => ({ ...item, protocol: "WMS" }));
       ALLOWED_LAYERS = new Set(parsed.map(item => item.id));
+      QUERYABLE_LAYERS = new Set(parsed.filter(item => item.queryable).map(item => item.id));
     }
 
   }
