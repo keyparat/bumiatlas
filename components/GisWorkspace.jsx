@@ -65,9 +65,17 @@ export default function GisWorkspace() {
         const pixel = map.latLngToContainerPoint(e.latlng);
         for (const layerName of activeLayers) {
           try {
+            const geographicLayer = ["bhumi:Persil", "petabpn:PersilBerdasarkanJenisHak", "dirptm:detailhgu", "dirptm:detailhgu_mati"].includes(layerName);
+            const clickX = geographicLayer
+              ? (e.latlng.lng - bounds.getWest()) / (bounds.getEast() - bounds.getWest()) * size.x
+              : pixel.x;
+            const clickY = geographicLayer
+              ? (bounds.getNorth() - e.latlng.lat) / (bounds.getNorth() - bounds.getSouth()) * size.y
+              : pixel.y;
             const params = new URLSearchParams({
               layers: layerName, bbox, width: String(size.x), height: String(size.y),
-              x: String(Math.round(pixel.x)), y: String(Math.round(pixel.y)),
+              x: String(Math.max(0, Math.min(size.x - 1, Math.round(clickX)))),
+              y: String(Math.max(0, Math.min(size.y - 1, Math.round(clickY)))),
               feature_count: "10"
             });
             const response = await fetch("http://127.0.0.1:8766/feature-info?" + params.toString());
